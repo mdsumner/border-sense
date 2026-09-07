@@ -174,11 +174,8 @@ map.attributionControl.addAttribution('Natural Earth &middot; NASA Blue Marble (
 map.setView([25,10],2.5);
 map.createPane('sat').style.zIndex=250;
 map.createPane('hill').style.zIndex=260; document.querySelector('.leaflet-hill-pane').style.mixBlendMode='multiply';
-map.createPane('shade').style.zIndex=405;
-map.createPane('lakes').style.zIndex=410;
-map.createPane('rivers').style.zIndex=420;
-map.createPane('bounds').style.zIndex=430;
-map.createPane('cities').style.zIndex=440;
+/* one shared canvas for every vector layer: separate canvases would swallow mouse events meant for the countries beneath */
+const R=L.canvas({padding:.5});
 map.createPane('labels').style.zIndex=650; document.querySelector('.leaflet-labels-pane').style.pointerEvents='none';
 
 const CONT = {'Africa':'#D9B36A','Asia':'#C98A6B','Europe':'#8FB0A0','North America':'#B9A0C7','South America':'#A7B96E','Oceania':'#7FB1C6','Antarctica':'#DDE3E6','Seven seas (open ocean)':'#7FB1C6'};
@@ -199,9 +196,9 @@ function countryStyle(f){
   else if(state.hover===p.n && !(state.quiz&&state.quiz.mode==='name')){ st.fillColor=css('--hl'); st.fillOpacity=satOn?.55:.75; }
   return st;
 }
-const countries = L.geoJSON(W.countries,{style:countryStyle,
+const countries = L.geoJSON(W.countries,{renderer:R,style:countryStyle,
   onEachFeature:(f,l)=>{
-    l.on('mouseover',()=>{ state.hover=f.properties.n; l.setStyle(countryStyle(f)); l.bringToFront(); showInfo(f.properties); });
+    l.on('mouseover',()=>{ state.hover=f.properties.n; l.setStyle(countryStyle(f)); showInfo(f.properties); });
     l.on('mouseout',()=>{ if(state.hover===f.properties.n) state.hover=null; l.setStyle(countryStyle(f)); if(!state.pinned) showInfo(null); });
     l.on('click',(e)=>{ L.DomEvent.stop(e); onCountryClick(f,l); });
   }}).addTo(map);
@@ -213,7 +210,7 @@ function shadeStyle(f){
   else if(shadeMode==='continent') c=(isDark()?CONT_DARK:CONT)[p.c]||css('--land');
   return {fillColor:c,fillOpacity:shadeMode==='none'?0:shadeOp,stroke:false};
 }
-const shade = L.geoJSON(W.countries,{pane:'shade',interactive:false,style:shadeStyle}).addTo(map);
+const shade = L.geoJSON(W.countries,{renderer:R,interactive:false,style:shadeStyle}).addTo(map);
 const satImg = L.layerGroup([0,-360,360].map(dx=>L.imageOverlay(SAT_SRC,[[-85.0511287798,-180+dx],[85.0511287798,180+dx]],{pane:'sat',interactive:false})));
 const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/';
 const esriSat = L.tileLayer(ESRI+'World_Imagery/MapServer/tile/{z}/{y}/{x}',{pane:'sat',maxNativeZoom:17,attribution:'Imagery &copy; Esri, Maxar, Earthstar Geographics, GIS User Community'});
@@ -222,22 +219,23 @@ const esriHill = L.tileLayer(ESRI+'Elevation/World_Hillshade/MapServer/tile/{z}/
 const BASES={plain:null,bm:satImg,'esri-sat':esriSat,'esri-relief':esriRelief};
 const IMG_BASES={bm:true,'esri-sat':true};
 let base='plain', reliefOn=false;
-const bounds2 = L.geoJSON(W.bounds,{pane:'bounds',interactive:false,style:{color:'rgba(5,15,25,.75)',weight:3.4,opacity:1,lineCap:'round'}});
-const lakes = L.geoJSON(W.lakes,{pane:'lakes',style:()=>({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast'),weight:.5}),interactive:false}).addTo(map);
-const rivers = L.geoJSON(W.rivers,{pane:'rivers',style:f=>({color:css('--river'),weight:f.properties.r<=3?1.4:.8,opacity:.9}),
+const bounds2 = L.geoJSON(W.bounds,{renderer:R,interactive:false,style:{color:'rgba(5,15,25,.75)',weight:3.4,opacity:1,lineCap:'round'}});
+const lakes = L.geoJSON(W.lakes,{renderer:R,style:()=>({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast'),weight:.5}),interactive:false}).addTo(map);
+const rivers = L.geoJSON(W.rivers,{renderer:R,style:f=>({color:css('--river'),weight:f.properties.r<=3?1.4:.8,opacity:.9}),
   onEachFeature:(f,l)=>{ if(f.properties.n) l.bindTooltip(f.properties.n,{sticky:true,className:'riv',direction:'top',offset:[0,-6]}); }}).addTo(map);
-const bounds = L.geoJSON(W.bounds,{pane:'bounds',interactive:false,style:f=>{
+const bounds = L.geoJSON(W.bounds,{renderer:R,interactive:false,style:f=>{
   const dis=/Disputed|Lease|Indefinite|Overlay|Unrecognized|Line of control|Breakaway/i.test(f.properties.f);
   return {color:dis?css('--border-dis'):css('--border'),weight:dis?1:1.3,opacity:1,dashArray:dis?'4 3':null,lineCap:'round'};
 }}).addTo(map);
 
+function reorder(){ [shade,lakes,rivers,bounds2,bounds,cityLayer].forEach(l=>{ if(map.hasLayer(l)) l.bringToFront(); }); }
 /* cities */
-const cityLayer = L.layerGroup().addTo(map);
+const cityLayer = L.featureGroup().addTo(map);
 const cityLabels = L.layerGroup().addTo(map);
 W.places.features.forEach(f=>{
   const p=f.properties, ll=[f.geometry.coordinates[1],f.geometry.coordinates[0]];
   const cap=p.cap===1;
-  const m=L.circleMarker(ll,{pane:'cities',radius:cap?3.2:2.2,color:css('--city'),weight:cap?1.4:.8,fillColor:cap?css('--city'):css('--panel'),fillOpacity:1});
+  const m=L.circleMarker(ll,{renderer:R,radius:cap?3.2:2.2,color:css('--city'),weight:cap?1.4:.8,fillColor:cap?css('--city'):css('--panel'),fillOpacity:1});
   m.bindTooltip((cap?'&#9733; ':'')+p.n+'<br><span style="opacity:.7">'+p.co+' &middot; '+fmtPop(p.pop)+'</span>',{className:'riv',direction:'top',offset:[0,-4]});
   m.p=p; cityLayer.addLayer(m);
   const lab=L.marker(ll,{pane:'labels',interactive:false,icon:L.divIcon({className:'',html:'<div class="lbl city'+(cap?' cap':'')+'">'+p.n+'</div>',iconSize:[0,0]})});
@@ -261,7 +259,7 @@ function refreshLabels(){
   cityLabels.eachLayer(l=>{ const on=cityShown(l.p)&&namesOn && z>=cityMinZoom(l.p) && b.contains(l.getLatLng()); l.getElement()&&(l.getElement().style.display=on?'':'none'); });
   cityLayer.eachLayer(m=>{ const on=cityShown(m.p) && z>=cityMinZoom(m.p)-1; m.setStyle({opacity:on?1:0,fillOpacity:on?1:0}); m.options.interactive=on; });
 }
-map.on('zoomend moveend',refreshLabels); refreshLabels();
+map.on('zoomend moveend',refreshLabels); refreshLabels(); reorder();
 
 function fmtPop(n){ n=+n||0; return n>=1e6?(n/1e6).toFixed(n>=1e7?0:1)+' M':n>=1e3?Math.round(n/1e3)+' k':n; }
 function fmtArea(a){ return a>=1e6?(a/1e6).toFixed(2)+' M km&sup2;':Math.round(a).toLocaleString()+' km&sup2;'; }
@@ -269,7 +267,7 @@ function capitalOf(a3){ const c=D.places.features.find(f=>f.properties.cap===1&&
 
 const info=document.getElementById('info'), iEye=document.getElementById('iEye'), iName=document.getElementById('iName'), iMeta=document.getElementById('iMeta');
 function showInfo(p){
-  if(state.quiz && state.quiz.mode==='find'){ info.hidden=false; iEye.textContent='Find it'; iName.textContent=state.quiz.target.n; iMeta.innerHTML='<span>Region</span><b>'+state.quiz.target.sub+'</b>'; info.classList.remove('hidden-names'); return; }
+  if(state.quiz && state.quiz.mode==='find'){ info.hidden=false; iEye.textContent='Click this country'; iName.textContent=state.quiz.target.n; iMeta.innerHTML='<span>Region</span><b>'+state.quiz.target.sub+'</b>'; info.classList.remove('hidden-names'); return; }
   if(state.quiz && state.quiz.mode==='name'){ info.hidden=true; return; }
   info.hidden=false;
   if(!p){ iEye.textContent='Hover a country'; iName.innerHTML='&nbsp;'; iMeta.innerHTML=''; return; }
@@ -292,11 +290,11 @@ tog('tNames',v=>{ namesOn=v; document.body.classList.toggle('hideNames',!v); ref
 document.getElementById('cityMin').addEventListener('change',e=>{ cityMin=e.target.value; refreshLabels(); });
 tog('tBorders',v=>{ bordersOn=v; syncBorders(); });
 function syncBorders(){
-  if(bordersOn){ if(satOn) bounds2.addTo(map); bounds.addTo(map); bounds.bringToFront(); }
+  if(bordersOn){ if(satOn) bounds2.addTo(map); bounds.addTo(map); reorder(); }
   else { if(map.hasLayer(bounds)) map.removeLayer(bounds); if(map.hasLayer(bounds2)) map.removeLayer(bounds2); }
   countries.setStyle(countryStyle);
 }
-tog('tRivers',v=>{ riversOn=v; if(v){rivers.addTo(map);} else {map.removeLayer(rivers);} });
+tog('tRivers',v=>{ riversOn=v; if(v){rivers.addTo(map); reorder();} else {map.removeLayer(rivers);} });
 const baseSel=document.getElementById('base');
 function setBase(b){
   Object.values(BASES).forEach(l=>{ if(l&&map.hasLayer(l)) map.removeLayer(l); });
@@ -348,11 +346,11 @@ function nextQuestion(){
   const t=pick(); if(!t){ Q.prompt.textContent='No countries match'; return; } q.target=t;
   countries.setStyle(countryStyle);
   if(q.mode==='find'){
-    Q.eye.textContent='Find it on the map'; Q.prompt.textContent=t.n; Q.sub.textContent=t.sub;
+    Q.eye.textContent='Click this country on the map'; Q.prompt.textContent=t.n; Q.sub.textContent=t.sub+' \u00b7 pan and zoom freely, then click it';
     showInfo(null);
   } else {
     Q.eye.textContent='Which country is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
-    const l=byName[t.n]; q.flash[t.n]=css('--hl'); l.setStyle(countryStyle(l.feature)); l.bringToFront();
+    const l=byName[t.n]; q.flash[t.n]=css('--hl'); l.setStyle(countryStyle(l.feature));
     const b=nearBounds(l.getBounds()); map.flyToBounds(b.pad(t.area<50000?3:1.2),{maxZoom:t.area<5000?7:6,duration:.8});
     const same=D.countries.features.map(f=>f.properties).filter(p=>p.sov&&p.n!==t.n&&p.c===t.c&&p.n!=='Antarctica');
     const opts=[t]; while(opts.length<4&&same.length){ const i=Math.floor(Math.random()*same.length); opts.push(same.splice(i,1)[0]); }
@@ -369,7 +367,7 @@ function quizClick(f){
   if(ok){ q.flash[p.n]=css('--ok'); Q.fb.textContent='Yes, '+p.n+'.'; Q.fb.className='fb ok'; }
   else { q.flash[p.n]=css('--bad'); q.flash[q.target.n]=css('--ok'); Q.fb.textContent='That was '+p.n+'. '+q.target.n+' is shown in green.'; Q.fb.className='fb bad';
     const l=byName[q.target.n], nb=nearBounds(l.getBounds()); if(!map.getBounds().contains(nb.getCenter())) map.flyToBounds(nb.pad(2),{maxZoom:5,duration:.8}); }
-  countries.setStyle(countryStyle); byName[q.target.n].bringToFront();
+  countries.setStyle(countryStyle);
   setTimeout(nextQuestion, ok?900:2600);
 }
 function answerName(o,btn){
