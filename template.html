@@ -1,0 +1,393 @@
+<title>Border Sense</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+__LEAFLET_CSS__
+</style>
+<style>
+:root{
+  --barh:44px;
+  --ocean:#B7CBD2; --land:#F1ECE0; --coast:#8FA7B0; --border:#3A2E2A; --border-dis:#8A5A4A;
+  --river:#4E86A0; --lake:#A9C4CE; --city:#3A2E2A; --hl:#E7B347; --hl2:#C24F2E; --ok:#3C8A5A; --bad:#B8392A;
+  --panel:#FBFAF5; --panel-2:#F0EDE4; --ink:#211F1D; --ink-2:#5E5852; --line:#D9D3C4; --focus:#2F6F9F;
+  --label:#3A2E2A; --label-halo:rgba(241,236,224,.9);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ocean:#131E27; --land:#2B3139; --coast:#4C5A64; --border:#E9DBB7; --border-dis:#B69A6E;
+    --river:#4C8CA8; --lake:#1E3340; --city:#F0E6CE; --hl:#E7B347; --hl2:#E0663F; --ok:#5DB27D; --bad:#E0663F;
+    --panel:#1B2027; --panel-2:#242A32; --ink:#E9E4D8; --ink-2:#A39C90; --line:#343B44; --focus:#7FB3D9;
+    --label:#EFE6D0; --label-halo:rgba(43,49,57,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --ocean:#131E27; --land:#2B3139; --coast:#4C5A64; --border:#E9DBB7; --border-dis:#B69A6E;
+  --river:#4C8CA8; --lake:#1E3340; --city:#F0E6CE; --hl:#E7B347; --hl2:#E0663F; --ok:#5DB27D; --bad:#E0663F;
+  --panel:#1B2027; --panel-2:#242A32; --ink:#E9E4D8; --ink-2:#A39C90; --line:#343B44; --focus:#7FB3D9;
+  --label:#EFE6D0; --label-halo:rgba(43,49,57,.9);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--ocean);color:var(--ink);font-family:"Atkinson Hyperlegible",system-ui,"Segoe UI",Helvetica,Arial,sans-serif;font-size:14px;overflow:hidden}
+#map{position:absolute;left:0;right:0;bottom:0;top:var(--barh);background:var(--ocean)}
+.leaflet-container{font-family:inherit;background:var(--ocean)}
+.leaflet-control-zoom a{background:var(--panel);color:var(--ink);border-color:var(--line)}
+.leaflet-bar{border:1px solid var(--line);box-shadow:none}
+.leaflet-control-attribution{background:var(--panel);color:var(--ink-2);font-size:10px}
+.leaflet-control-attribution a{color:var(--focus)}
+
+/* top bar */
+#bar{position:absolute;top:0;left:0;right:0;z-index:1000;display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+#bar h1{font-family:"Fraunces",Georgia,serif;font-weight:700;font-size:20px;margin:0 6px 0 0;letter-spacing:-.01em}
+#bar h1 small{font-family:"Atkinson Hyperlegible",sans-serif;font-weight:400;font-size:11px;color:var(--ink-2);margin-left:8px;letter-spacing:.08em;text-transform:uppercase}
+.group{display:flex;align-items:center;gap:4px;padding-left:12px;border-left:1px solid var(--line)}
+.group .lab{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);margin-right:4px}
+.tog{appearance:none;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font:inherit;font-size:12.5px;padding:4px 9px;border-radius:3px;cursor:pointer;line-height:1.2}
+.tog[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.tog:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.spacer{flex:1}
+
+/* info card */
+#info{position:absolute;left:14px;bottom:24px;z-index:1000;min-width:230px;max-width:320px;background:var(--panel);border:1px solid var(--line);padding:12px 14px;pointer-events:none}
+#info .eyebrow{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+#info .name{font-family:"Fraunces",Georgia,serif;font-size:24px;font-weight:500;line-height:1.1;margin:2px 0 6px;text-wrap:balance}
+#info .meta{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:12.5px;color:var(--ink-2)}
+#info .meta b{color:var(--ink);font-weight:400;font-variant-numeric:tabular-nums}
+#info.hidden-names .name{filter:blur(7px)}
+#info .hint{font-size:12px;color:var(--ink-2);font-style:italic}
+
+/* quiz */
+#quiz[hidden]{display:none}
+#quiz{position:absolute;right:14px;top:calc(var(--barh) + 14px);z-index:1000;width:300px;background:var(--panel);border:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+#quiz .eyebrow{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+#quiz .prompt{font-family:"Fraunces",Georgia,serif;font-size:26px;font-weight:500;line-height:1.1;text-wrap:balance;min-height:30px}
+#quiz .sub{font-size:12.5px;color:var(--ink-2)}
+#quiz .row{display:flex;gap:6px;flex-wrap:wrap}
+#quiz .score{display:flex;gap:14px;font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-2)}
+#quiz .score b{color:var(--ink);font-size:16px;font-weight:700;margin-right:3px}
+#quiz .fb{font-size:13px;min-height:18px}
+#quiz .fb.ok{color:var(--ok)} #quiz .fb.bad{color:var(--bad)}
+.choices{display:grid;gap:6px}
+.choice{appearance:none;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font:inherit;font-size:13.5px;text-align:left;padding:7px 10px;border-radius:3px;cursor:pointer}
+.choice:hover{border-color:var(--ink)}
+.choice.right{background:var(--ok);color:#fff;border-color:var(--ok)}
+.choice.wrong{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--panel);font:inherit;font-size:12.5px;padding:5px 10px;border-radius:3px;cursor:pointer}
+.btn.quiet{background:transparent;color:var(--ink)}
+select{font:inherit;font-size:12.5px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:4px 6px}
+
+/* labels on map */
+.lbl{font-family:"Atkinson Hyperlegible",sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--label);white-space:nowrap;text-align:center;pointer-events:none;transform:translate(-50%,-50%);text-shadow:0 0 3px var(--label-halo),0 0 3px var(--label-halo),0 0 4px var(--label-halo)}
+.lbl.big{font-size:13px;font-weight:700;letter-spacing:.16em}
+.lbl.city{text-transform:none;letter-spacing:0;font-size:10.5px;transform:translate(6px,-50%);text-align:left;color:var(--ink)}
+.lbl.city.cap{font-weight:700}
+.lbl.riv{text-transform:none;letter-spacing:.02em;font-style:italic;color:var(--river);font-size:10.5px}
+.leaflet-tooltip.riv{background:var(--panel);color:var(--ink);border:1px solid var(--line);font-style:italic;box-shadow:none}
+.leaflet-tooltip.riv::before{display:none}
+.hideNames .lbl{display:none}
+input[type=range]{width:90px;accent-color:var(--ink);vertical-align:middle}
+body.sat{--label:#FFF6DC;--label-halo:rgba(10,20,30,.95);--city:#FFF6DC;--coast:rgba(255,246,220,.45);--border:#FFF1C9;--border-dis:#F2C77A;--river:#9CD3F0;--lake:transparent}
+body.sat .lbl.city{color:#FFF6DC}
+@media (max-width:720px){
+  #quiz{width:auto;left:14px;right:14px;top:auto;bottom:14px}
+  #info{display:none}
+  #bar{gap:8px}
+}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
+</style>
+
+<div id="bar">
+  <h1>Border Sense<small>Natural Earth 1:50m</small></h1>
+  <div class="group"><span class="lab">Show</span>
+    <button class="tog" id="tNames" aria-pressed="true">Names</button>
+    <select id="cityMin" aria-label="Cities"><option value="cap">Capitals</option><option value="5000000">Cities 5M+</option><option value="1000000" selected>Cities 1M+</option><option value="250000">Cities 250k+</option><option value="0">All cities</option><option value="off">No cities</option></select>
+    <button class="tog" id="tRivers" aria-pressed="true">Rivers</button>
+  </div>
+  <div class="group"><span class="lab">Base</span>
+    <select id="base" aria-label="Base map">
+      <option value="plain" selected>Plain</option>
+      <option value="bm">Blue Marble</option>
+      <option value="esri-sat" data-live>Satellite (live)</option>
+      <option value="esri-relief" data-live>Terrain (live)</option>
+    </select>
+    <button class="tog" id="tRelief" aria-pressed="false" data-live hidden>Hillshade</button>
+  </div>
+  <div class="group"><span class="lab">Shade</span>
+    <select id="shade" aria-label="Shading"><option value="none">None</option><option value="nation">By nation</option><option value="continent">By continent</option></select>
+    <input type="range" id="shadeOp" min="0" max="100" value="45" aria-label="Shade opacity" title="Shade opacity">
+  </div>
+  <div class="group"><span class="lab">Quiz</span>
+    <button class="tog" id="qFind" aria-pressed="false">Find it</button>
+    <button class="tog" id="qName" aria-pressed="false">Name it</button>
+    <select id="qRegion" aria-label="Region">
+      <option value="">Whole world</option>
+      <option>Africa</option><option>Asia</option><option>Europe</option>
+      <option>North America</option><option>South America</option><option>Oceania</option>
+    </select>
+    <select id="qSize" aria-label="Country size">
+      <option value="all">All sizes</option>
+      <option value="big">Large only</option>
+      <option value="small">Small ones too</option>
+    </select>
+  </div>
+  <span class="spacer"></span>
+</div>
+
+<div id="map"></div>
+
+<div id="info">
+  <div class="eyebrow" id="iEye">Hover a country</div>
+  <div class="name" id="iName">&nbsp;</div>
+  <div class="meta" id="iMeta"></div>
+</div>
+
+<div id="quiz" hidden>
+  <div class="eyebrow" id="qEye">Find it</div>
+  <div class="prompt" id="qPrompt"></div>
+  <div class="sub" id="qSub"></div>
+  <div class="choices" id="qChoices"></div>
+  <div class="fb" id="qFb"></div>
+  <div class="score"><span><b id="sRight">0</b>right</span><span><b id="sWrong">0</b>wrong</span><span><b id="sStreak">0</b>streak</span><span><b id="sBest">0</b>best</span></div>
+  <div class="row"><button class="btn quiet" id="qSkip">Skip</button><button class="btn quiet" id="qStop">Stop</button></div>
+</div>
+
+<script>
+__LEAFLET_JS__
+</script>
+<script id="geo" type="application/json">__DATA__</script>
+<script>const SAT_SRC="__SAT__", LIVE=__LIVE__;</script>
+<script>
+function init(D){
+function shiftCoords(c,dx){ return (typeof c[0]==='number') ? [c[0]+dx,c[1]] : c.map(x=>shiftCoords(x,dx)); }
+function worlds(fc){ const out=[]; [0,-360,360].forEach(dx=>fc.features.forEach(f=>out.push({type:'Feature',properties:Object.assign({},f.properties,{dx}),geometry:{type:f.geometry.type,coordinates:dx?shiftCoords(f.geometry.coordinates,dx):f.geometry.coordinates}}))); return {type:'FeatureCollection',features:out}; }
+const W={countries:worlds(D.countries),bounds:worlds(D.bounds),rivers:worlds(D.rivers),lakes:worlds(D.lakes),places:worlds(D.places)};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+const barEl=document.getElementById('bar');
+function fitBar(){ document.documentElement.style.setProperty('--barh',barEl.offsetHeight+'px'); }
+fitBar(); addEventListener('resize',()=>{fitBar(); map.invalidateSize();});
+const map = L.map('map',{preferCanvas:true,zoomControl:false,minZoom:2,maxZoom:LIVE?11:9,worldCopyJump:false,
+  maxBounds:[[-88,-270],[88,270]],maxBoundsViscosity:.8,attributionControl:true, zoomSnap:.5});
+L.control.zoom({position:'bottomright'}).addTo(map);
+map.attributionControl.setPrefix('');
+map.attributionControl.addAttribution('Natural Earth &middot; NASA Blue Marble (public domain) &middot; Leaflet');
+map.setView([25,10],2.5);
+map.createPane('sat').style.zIndex=250;
+map.createPane('hill').style.zIndex=260; document.querySelector('.leaflet-hill-pane').style.mixBlendMode='multiply';
+map.createPane('shade').style.zIndex=405;
+map.createPane('lakes').style.zIndex=410;
+map.createPane('rivers').style.zIndex=420;
+map.createPane('bounds').style.zIndex=430;
+map.createPane('cities').style.zIndex=440;
+map.createPane('labels').style.zIndex=650; document.querySelector('.leaflet-labels-pane').style.pointerEvents='none';
+
+const CONT = {'Africa':'#D9B36A','Asia':'#C98A6B','Europe':'#8FB0A0','North America':'#B9A0C7','South America':'#A7B96E','Oceania':'#7FB1C6','Antarctica':'#DDE3E6','Seven seas (open ocean)':'#7FB1C6'};
+const CONT_DARK = {'Africa':'#6A5330','Asia':'#63402F','Europe':'#3B5A4E','North America':'#4E3F5B','South America':'#4B5330','Oceania':'#2E4C5C','Antarctica':'#39424A','Seven seas (open ocean)':'#2E4C5C'};
+const isDark = () => css('--ocean').toUpperCase()==='#131E27';
+
+let satOn=false, landOff=false, namesOn=true, citiesOn=true, riversOn=true, shadeMode='none', shadeOp=.45;
+const NATION=['#E4B04A','#7FB3C9','#C97A6B','#8FBF8A','#B99BD1','#D9A377','#6FA9A3','#D48BA6'];
+const NATION_DARK=['#B98A2E','#3F7C97','#9E4F42','#4F8A4C','#7E62A0','#A66A3A','#2F7A73','#A0526E'];
+const state = {hover:null, pinned:null, quiz:null};
+
+function countryStyle(f){
+  const p=f.properties;
+  const st={fillColor:css('--land'),fillOpacity:landOff?0:1,color:css('--coast'),weight:satOn?.8:.6,opacity:1};
+  const ho=satOn?.65:1;
+  if(state.quiz && state.quiz.flash && state.quiz.flash[p.n]){ st.fillColor=state.quiz.flash[p.n]; st.fillOpacity=ho; }
+  else if(state.pinned===p.n){ st.fillColor=css('--hl'); st.fillOpacity=ho; }
+  else if(state.hover===p.n && !(state.quiz&&state.quiz.mode==='name')){ st.fillColor=css('--hl'); st.fillOpacity=satOn?.55:.75; }
+  return st;
+}
+const countries = L.geoJSON(W.countries,{style:countryStyle,
+  onEachFeature:(f,l)=>{
+    l.on('mouseover',()=>{ state.hover=f.properties.n; l.setStyle(countryStyle(f)); l.bringToFront(); showInfo(f.properties); });
+    l.on('mouseout',()=>{ if(state.hover===f.properties.n) state.hover=null; l.setStyle(countryStyle(f)); if(!state.pinned) showInfo(null); });
+    l.on('click',(e)=>{ L.DomEvent.stop(e); onCountryClick(f,l); });
+  }}).addTo(map);
+const byName={}; countries.eachLayer(l=>{ if(!l.feature.properties.dx) byName[l.feature.properties.n]=l; });
+
+function shadeStyle(f){
+  const p=f.properties; let c;
+  if(shadeMode==='nation') c=(isDark()?NATION_DARK:NATION)[p.col%8];
+  else if(shadeMode==='continent') c=(isDark()?CONT_DARK:CONT)[p.c]||css('--land');
+  return {fillColor:c,fillOpacity:shadeMode==='none'?0:shadeOp,stroke:false};
+}
+const shade = L.geoJSON(W.countries,{pane:'shade',interactive:false,style:shadeStyle}).addTo(map);
+const satImg = L.layerGroup([0,-360,360].map(dx=>L.imageOverlay(SAT_SRC,[[-85.0511287798,-180+dx],[85.0511287798,180+dx]],{pane:'sat',interactive:false})));
+const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/';
+const esriSat = L.tileLayer(ESRI+'World_Imagery/MapServer/tile/{z}/{y}/{x}',{pane:'sat',maxNativeZoom:17,attribution:'Imagery &copy; Esri, Maxar, Earthstar Geographics, GIS User Community'});
+const esriRelief = L.tileLayer(ESRI+'World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',{pane:'sat',maxNativeZoom:13,attribution:'Shaded relief &copy; Esri'});
+const esriHill = L.tileLayer(ESRI+'Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',{pane:'hill',maxNativeZoom:16,opacity:.55,attribution:'Hillshade &copy; Esri'});
+const BASES={plain:null,bm:satImg,'esri-sat':esriSat,'esri-relief':esriRelief};
+const IMG_BASES={bm:true,'esri-sat':true};
+let base='plain', reliefOn=false;
+const bounds2 = L.geoJSON(W.bounds,{pane:'bounds',interactive:false,style:{color:'rgba(5,15,25,.75)',weight:3.4,opacity:1,lineCap:'round'}});
+const lakes = L.geoJSON(W.lakes,{pane:'lakes',style:()=>({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast'),weight:.5}),interactive:false}).addTo(map);
+const rivers = L.geoJSON(W.rivers,{pane:'rivers',style:f=>({color:css('--river'),weight:f.properties.r<=3?1.4:.8,opacity:.9}),
+  onEachFeature:(f,l)=>{ if(f.properties.n) l.bindTooltip(f.properties.n,{sticky:true,className:'riv',direction:'top',offset:[0,-6]}); }}).addTo(map);
+const bounds = L.geoJSON(W.bounds,{pane:'bounds',interactive:false,style:f=>{
+  const dis=/Disputed|Lease|Indefinite|Overlay|Unrecognized|Line of control|Breakaway/i.test(f.properties.f);
+  return {color:dis?css('--border-dis'):css('--border'),weight:dis?1:1.3,opacity:1,dashArray:dis?'4 3':null,lineCap:'round'};
+}}).addTo(map);
+
+/* cities */
+const cityLayer = L.layerGroup().addTo(map);
+const cityLabels = L.layerGroup().addTo(map);
+W.places.features.forEach(f=>{
+  const p=f.properties, ll=[f.geometry.coordinates[1],f.geometry.coordinates[0]];
+  const cap=p.cap===1;
+  const m=L.circleMarker(ll,{pane:'cities',radius:cap?3.2:2.2,color:css('--city'),weight:cap?1.4:.8,fillColor:cap?css('--city'):css('--panel'),fillOpacity:1});
+  m.bindTooltip((cap?'&#9733; ':'')+p.n+'<br><span style="opacity:.7">'+p.co+' &middot; '+fmtPop(p.pop)+'</span>',{className:'riv',direction:'top',offset:[0,-4]});
+  m.p=p; cityLayer.addLayer(m);
+  const lab=L.marker(ll,{pane:'labels',interactive:false,icon:L.divIcon({className:'',html:'<div class="lbl city'+(cap?' cap':'')+'">'+p.n+'</div>',iconSize:[0,0]})});
+  lab.p=p; cityLabels.addLayer(lab);
+});
+/* country labels */
+const cLabels = L.layerGroup().addTo(map);
+W.countries.features.forEach(f=>{
+  const p=f.properties; if(!p.lp||p.n==='Antarctica') return;
+  const big=p.area>2500000;
+  const lab=L.marker([p.lp[1],p.lp[0]+p.dx],{pane:'labels',interactive:false,icon:L.divIcon({className:'',html:'<div class="lbl'+(big?' big':'')+'">'+p.sn+'</div>',iconSize:[0,0]})});
+  lab.p=p; cLabels.addLayer(lab);
+});
+let cityMin='1000000';
+function cityShown(p){ if(cityMin==='off') return false; if(cityMin==='cap') return p.cap===1; return p.cap===1 || p.pop>=+cityMin; }
+function cityMinZoom(p){ if(p.cap===1) return p.pop>3e6?3:p.pop>5e5?4.5:5.5; return p.pop>8e6?4:p.pop>2e6?5:p.pop>1e6?5.5:p.pop>2.5e5?6.5:7.5; }
+function countryMinZoom(p){ return p.area>2500000?2 : p.area>1000000?3 : p.area>250000?4 : p.area>40000?5 : 6.5; }
+function refreshLabels(){
+  const z=map.getZoom(), b=map.getBounds().pad(.2);
+  cLabels.eachLayer(l=>{ const on=namesOn && z>=countryMinZoom(l.p) && b.contains(l.getLatLng()); l.getElement()&&(l.getElement().style.display=on?'':'none'); });
+  cityLabels.eachLayer(l=>{ const on=cityShown(l.p)&&namesOn && z>=cityMinZoom(l.p) && b.contains(l.getLatLng()); l.getElement()&&(l.getElement().style.display=on?'':'none'); });
+  cityLayer.eachLayer(m=>{ const on=cityShown(m.p) && z>=cityMinZoom(m.p)-1; m.setStyle({opacity:on?1:0,fillOpacity:on?1:0}); m.options.interactive=on; });
+}
+map.on('zoomend moveend',refreshLabels); refreshLabels();
+
+function fmtPop(n){ n=+n||0; return n>=1e6?(n/1e6).toFixed(n>=1e7?0:1)+' M':n>=1e3?Math.round(n/1e3)+' k':n; }
+function fmtArea(a){ return a>=1e6?(a/1e6).toFixed(2)+' M km&sup2;':Math.round(a).toLocaleString()+' km&sup2;'; }
+function capitalOf(a3){ const c=D.places.features.find(f=>f.properties.cap===1&&f.properties.a3===a3); return c?c.properties.n:null; }
+
+const info=document.getElementById('info'), iEye=document.getElementById('iEye'), iName=document.getElementById('iName'), iMeta=document.getElementById('iMeta');
+function showInfo(p){
+  if(state.quiz && state.quiz.mode==='find'){ info.hidden=false; iEye.textContent='Find it'; iName.textContent=state.quiz.target.n; iMeta.innerHTML='<span>Region</span><b>'+state.quiz.target.sub+'</b>'; info.classList.remove('hidden-names'); return; }
+  if(state.quiz && state.quiz.mode==='name'){ info.hidden=true; return; }
+  info.hidden=false;
+  if(!p){ iEye.textContent='Hover a country'; iName.innerHTML='&nbsp;'; iMeta.innerHTML=''; return; }
+  iEye.textContent = p.sov ? p.c : (p.t+' of '+p.s);
+  iName.textContent=p.n;
+  const cap=capitalOf(p.a3);
+  iMeta.innerHTML = '<span>Region</span><b>'+p.sub+'</b>'+(cap?'<span>Capital</span><b>'+cap+'</b>':'')+'<span>Area</span><b>'+fmtArea(p.area)+'</b><span>People</span><b>'+fmtPop(p.pop)+'</b>';
+  info.classList.toggle('hidden-names',!namesOn);
+}
+function onCountryClick(f,l){
+  if(state.quiz){ quizClick(f); return; }
+  state.pinned = state.pinned===f.properties.n ? null : f.properties.n;
+  countries.setStyle(countryStyle); showInfo(state.pinned?f.properties:null);
+}
+map.on('click',()=>{ if(!state.quiz&&state.pinned){ state.pinned=null; countries.setStyle(countryStyle); showInfo(null);} });
+
+/* toggles */
+function tog(id,fn){ const b=document.getElementById(id); b.addEventListener('click',()=>{ const v=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',v); fn(v); }); return b; }
+tog('tNames',v=>{ namesOn=v; document.body.classList.toggle('hideNames',!v); refreshLabels(); showInfo(state.pinned?byName[state.pinned].feature.properties:null); });
+document.getElementById('cityMin').addEventListener('change',e=>{ cityMin=e.target.value; refreshLabels(); });
+tog('tRivers',v=>{ riversOn=v; if(v){rivers.addTo(map);} else {map.removeLayer(rivers);} });
+const baseSel=document.getElementById('base');
+function setBase(b){
+  Object.values(BASES).forEach(l=>{ if(l&&map.hasLayer(l)) map.removeLayer(l); });
+  base=b; satOn=!!IMG_BASES[b]; landOff=b!=='plain';
+  document.body.classList.toggle('sat',satOn);
+  if(BASES[b]) BASES[b].addTo(map);
+  if(satOn){ bounds2.addTo(map); bounds.bringToFront(); } else if(map.hasLayer(bounds2)) map.removeLayer(bounds2);
+  restyleAll();
+}
+baseSel.addEventListener('change',()=>setBase(baseSel.value));
+if(LIVE) tog('tRelief',v=>{ reliefOn=v; if(v) esriHill.addTo(map); else map.removeLayer(esriHill); });
+const shadeSel=document.getElementById('shade'), shadeRange=document.getElementById('shadeOp');
+shadeSel.addEventListener('change',()=>{ shadeMode=shadeSel.value; shade.setStyle(shadeStyle); });
+shadeRange.addEventListener('input',()=>{ shadeOp=shadeRange.value/100; if(shadeMode==='none'){ shadeMode='nation'; shadeSel.value='nation'; } shade.setStyle(shadeStyle); });
+
+/* ---------- quiz ---------- */
+const Q={el:document.getElementById('quiz'),eye:document.getElementById('qEye'),prompt:document.getElementById('qPrompt'),sub:document.getElementById('qSub'),choices:document.getElementById('qChoices'),fb:document.getElementById('qFb'),
+  right:document.getElementById('sRight'),wrong:document.getElementById('sWrong'),streak:document.getElementById('sStreak'),best:document.getElementById('sBest')};
+const score={right:0,wrong:0,streak:0,best:0};
+try{ score.best=+localStorage.getItem('bs-best')||0; }catch(e){}
+function paintScore(){ Q.right.textContent=score.right; Q.wrong.textContent=score.wrong; Q.streak.textContent=score.streak; Q.best.textContent=score.best; }
+paintScore();
+const bFind=document.getElementById('qFind'), bName=document.getElementById('qName');
+function pool(){
+  const reg=document.getElementById('qRegion').value, size=document.getElementById('qSize').value;
+  return D.countries.features.map(f=>f.properties).filter(p=>p.sov && p.n!=='Antarctica' && (!reg||p.c===reg) && (size==='all'?p.area>=2500: size==='big'?p.area>=60000: true));
+}
+function startQuiz(mode){
+  state.quiz={mode,target:null,recent:[],flash:{},lock:false};
+  bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name');
+  Q.el.hidden=false; state.pinned=null;
+  if(mode==='name'){ document.body.classList.add('hideNames'); }
+  nextQuestion();
+}
+function stopQuiz(){
+  state.quiz=null; bFind.setAttribute('aria-pressed','false'); bName.setAttribute('aria-pressed','false');
+  Q.el.hidden=true; document.body.classList.toggle('hideNames',!namesOn); refreshLabels(); countries.setStyle(countryStyle); showInfo(null);
+}
+function nearBounds(b){ const c=map.getCenter().lng, bc=b.getCenter().lng; let dx=0; if(bc-c>180) dx=-360; else if(c-bc>180) dx=360; return dx?L.latLngBounds([b.getSouth(),b.getWest()+dx],[b.getNorth(),b.getEast()+dx]):b; }
+function pick(){
+  const P=pool(); if(!P.length) return null;
+  let c; for(let i=0;i<20;i++){ c=P[Math.floor(Math.random()*P.length)]; if(!state.quiz.recent.includes(c.n)) break; }
+  state.quiz.recent.push(c.n); if(state.quiz.recent.length>Math.min(12,P.length-1)) state.quiz.recent.shift();
+  return c;
+}
+function nextQuestion(){
+  const q=state.quiz; if(!q) return; q.flash={}; q.lock=false; Q.fb.textContent=''; Q.fb.className='fb'; Q.choices.innerHTML='';
+  const t=pick(); if(!t){ Q.prompt.textContent='No countries match'; return; } q.target=t;
+  countries.setStyle(countryStyle);
+  if(q.mode==='find'){
+    Q.eye.textContent='Find it on the map'; Q.prompt.textContent=t.n; Q.sub.textContent=t.sub;
+    showInfo(null);
+  } else {
+    Q.eye.textContent='Which country is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
+    const l=byName[t.n]; q.flash[t.n]=css('--hl'); l.setStyle(countryStyle(l.feature)); l.bringToFront();
+    const b=nearBounds(l.getBounds()); map.flyToBounds(b.pad(t.area<50000?3:1.2),{maxZoom:t.area<5000?7:6,duration:.8});
+    const same=D.countries.features.map(f=>f.properties).filter(p=>p.sov&&p.n!==t.n&&p.c===t.c&&p.n!=='Antarctica');
+    const opts=[t]; while(opts.length<4&&same.length){ const i=Math.floor(Math.random()*same.length); opts.push(same.splice(i,1)[0]); }
+    opts.sort(()=>Math.random()-.5);
+    opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
+    showInfo(null);
+  }
+}
+function mark(ok){ if(ok){score.right++;score.streak++; if(score.streak>score.best){score.best=score.streak; try{localStorage.setItem('bs-best',score.best);}catch(e){}}} else {score.wrong++;score.streak=0;} paintScore(); }
+function quizClick(f){
+  const q=state.quiz; if(q.mode!=='find'||q.lock) return; q.lock=true;
+  const p=f.properties, ok=p.n===q.target.n;
+  mark(ok);
+  if(ok){ q.flash[p.n]=css('--ok'); Q.fb.textContent='Yes, '+p.n+'.'; Q.fb.className='fb ok'; }
+  else { q.flash[p.n]=css('--bad'); q.flash[q.target.n]=css('--ok'); Q.fb.textContent='That was '+p.n+'. '+q.target.n+' is shown in green.'; Q.fb.className='fb bad';
+    const l=byName[q.target.n], nb=nearBounds(l.getBounds()); if(!map.getBounds().contains(nb.getCenter())) map.flyToBounds(nb.pad(2),{maxZoom:5,duration:.8}); }
+  countries.setStyle(countryStyle); byName[q.target.n].bringToFront();
+  setTimeout(nextQuestion, ok?900:2600);
+}
+function answerName(o,btn){
+  const q=state.quiz; if(q.lock) return; q.lock=true;
+  const ok=o.n===q.target.n; mark(ok);
+  btn.classList.add(ok?'right':'wrong');
+  if(!ok){ [...Q.choices.children].forEach(b=>{ if(b.textContent===q.target.n) b.classList.add('right'); }); }
+  Q.fb.textContent = ok ? 'Right.' : 'It is '+q.target.n+'.'; Q.fb.className='fb '+(ok?'ok':'bad');
+  setTimeout(nextQuestion, ok?800:2200);
+}
+bFind.addEventListener('click',()=> state.quiz&&state.quiz.mode==='find' ? stopQuiz() : startQuiz('find'));
+bName.addEventListener('click',()=> state.quiz&&state.quiz.mode==='name' ? stopQuiz() : startQuiz('name'));
+document.getElementById('qSkip').addEventListener('click',()=>{ if(state.quiz&&!state.quiz.lock){ score.streak=0; paintScore(); nextQuestion(); } });
+document.getElementById('qStop').addEventListener('click',stopQuiz);
+document.getElementById('qRegion').addEventListener('change',()=>{ if(state.quiz){ state.quiz.recent=[]; nextQuestion(); } });
+document.getElementById('qSize').addEventListener('change',()=>{ if(state.quiz){ state.quiz.recent=[]; nextQuestion(); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&state.quiz) stopQuiz(); if(state.quiz&&state.quiz.mode==='name'&&/^[1-4]$/.test(e.key)){ const b=Q.choices.children[+e.key-1]; b&&b.click(); } });
+
+/* theme changes: restyle vectors from tokens */
+function restyleAll(){ countries.setStyle(countryStyle); shade.setStyle(shadeStyle); lakes.setStyle({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast')}); rivers.setStyle(f=>({color:css('--river')})); bounds.setStyle(f=>{const dis=/Disputed|Lease|Indefinite|Overlay|Unrecognized|Line of control|Breakaway/i.test(f.properties.f); return {color:dis?css('--border-dis'):css('--border'),weight:dis?1:(satOn?1.5:1.3)};}); cityLayer.eachLayer(m=>m.setStyle({color:css('--city'),fillColor:m.p.cap===1?css('--city'):css('--panel')})); }
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',restyleAll);
+new MutationObserver(restyleAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+}
+if(!LIVE){ document.querySelectorAll('[data-live]').forEach(e=>e.remove()); }
+else { document.querySelectorAll('[data-live]').forEach(e=>e.hidden=false); }
+const geoEl=document.getElementById('geo');
+if(geoEl){ init(JSON.parse(geoEl.textContent)); }
+else { fetch('data.json').then(r=>r.json()).then(init); }
+</script>
