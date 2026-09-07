@@ -1,3 +1,10 @@
 cache/
 dist/
 __pycache__/
+.Rproj.user
+border-sense.Rproj
+.Rhistory
+.RData
+.httr-oauth
+.DS_Store
+.quarto
