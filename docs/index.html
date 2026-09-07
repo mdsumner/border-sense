@@ -92,6 +92,8 @@ body.sat{--label:#FFF6DC;--label-halo:rgba(10,20,30,.95);--city:#FFF6DC;--coast:
 body.sat .lbl.city{color:#FFF6DC}
 body.quiz .leaflet-tooltip{display:none}
 /* help */
+#dbg{position:absolute;left:14px;top:calc(var(--barh) + 14px);z-index:1500;background:var(--panel);border:1px solid var(--hl2);color:var(--ink);font-size:11.5px;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;padding:8px 10px;pointer-events:none}
+#dbg[hidden]{display:none}
 #help[hidden]{display:none}
 #help{position:absolute;inset:0;z-index:2000;background:rgba(20,24,28,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
 #help .sheet{background:var(--panel);color:var(--ink);border:1px solid var(--line);max-width:720px;width:100%;padding:28px 32px 36px;position:relative}
@@ -191,6 +193,7 @@ body.quiz .leaflet-tooltip{display:none}
     <h3>Longitude range and the dateline</h3>
     <p>The map can be panned from 270 degrees west to 270 degrees east, one and a half turns of the globe, so the Pacific can sit in the middle of the screen with the Americas on the right and Asia on the left. Every layer is drawn three times, at -360, 0 and +360 degrees, which is what makes the view seamless across the 180th meridian.</p>
     <p>The reason this needs saying is that Natural Earth, like most world datasets, splits polygons at the antimeridian, so a country that straddles it (Fiji, Russia at Chukotka, the western Aleutians of the USA, New Zealand's outlying islands, Kiribati) arrives as parts on both edges of the world and a bounding box that spans the whole planet. At build time the smaller side of each such country is shifted across the line by 360 degrees so the country is contiguous again: Fiji lives at 174 to 182 degrees east, Russia runs 19 to 190 east, the far Aleutians sit at -188. With the three copies drawn, every part of every country is always visible in the place you would expect. Kiribati is the one country that is spread out for real, with the Gilberts at 173 east and the Line Islands at 157 west, so its quiz zoom is necessarily wide.</p>
+    <p>When a quiz flies to a place it chooses whichever of the three copies is nearest the current view, restricted to copies that fit inside the pannable range; otherwise the animation would aim past the edge of the map and snap back. Note that Natural Earth files Russia under Europe, so a Europe quiz can legitimately land on Chukotka.</p>
 
     <h3>The quizzes</h3>
     <h4>Find it</h4>
@@ -206,6 +209,7 @@ body.quiz .leaflet-tooltip{display:none}
 
     <h3>Keyboard</h3>
     <ul>
+      <li><kbd>d</kbd> toggles a debug readout (also <code>?debug</code> in the URL): the current target, the bounds the map was told to fly to, and the view centre and zoom. Use it if an auto zoom lands somewhere odd.</li>
       <li><kbd>1</kbd> to <kbd>4</kbd> answer a Name it or River question</li>
       <li><kbd>Esc</kbd> stops the current quiz, or closes this help</li>
       <li>Scroll to zoom, drag to pan, as usual; the map holds at 88 degrees north and south</li>
@@ -439,7 +443,21 @@ function pickRiver(){
   return c;
 }
 function boxBounds(b){ return L.latLngBounds([b[1],b[0]],[b[3],b[2]]); }
-function nearBounds(b){ const c=map.getCenter().lng, bc=b.getCenter().lng; let dx=0; if(bc-c>180) dx=-360; else if(c-bc>180) dx=360; return dx?L.latLngBounds([b.getSouth(),b.getWest()+dx],[b.getNorth(),b.getEast()+dx]):b; }
+/* pick the world copy (-360, 0, +360) of a bounds that is nearest the current view centre,
+   but only copies that fit inside the pannable range; a copy outside it makes flyTo overshoot and snap back */
+const LON_LIMIT=250;
+function nearBounds(b){
+  const c=map.getCenter().lng; let best=b, bestD=Infinity;
+  [0,-360,360].forEach(dx=>{ const w=b.getWest()+dx, e=b.getEast()+dx; if(w<-LON_LIMIT||e>LON_LIMIT) return;
+    const d=Math.abs((w+e)/2-c); if(d<bestD){ bestD=d; best=L.latLngBounds([b.getSouth(),w],[b.getNorth(),e]); } });
+  dbg.copy=best.getWest().toFixed(1)+'..'+best.getEast().toFixed(1)+' (view centre '+c.toFixed(1)+')';
+  return best;
+}
+const dbg={on:/[?&]debug/.test(location.search),copy:'',target:''};
+const dbgEl=document.createElement('div'); dbgEl.id='dbg'; dbgEl.hidden=true; document.body.appendChild(dbgEl);
+function paintDbg(){ if(!dbg.on){ dbgEl.hidden=true; return; } dbgEl.hidden=false; const c=map.getCenter();
+  dbgEl.textContent='target: '+dbg.target+'\nfly bounds: '+dbg.copy+'\nmap: '+c.lat.toFixed(2)+', '+c.lng.toFixed(2)+' z'+map.getZoom().toFixed(1)+'\nview: '+map.getBounds().getWest().toFixed(1)+'..'+map.getBounds().getEast().toFixed(1); }
+map.on('move zoom',paintDbg); if(dbg.on) window.map=map;
 function pick(){
   const P=pool(); if(!P.length) return null;
   let c; for(let i=0;i<20;i++){ c=P[Math.floor(Math.random()*P.length)]; if(!state.quiz.recent.includes(c.n)) break; }
@@ -450,7 +468,7 @@ function nextQuestion(){
   const q=state.quiz; if(!q) return; q.flash={}; q.lock=false; Q.fb.textContent=''; Q.fb.className='fb'; Q.choices.innerHTML='';
   q.river=null;
   if(q.mode==='river'){
-    const g=pickRiver(); if(!g){ Q.prompt.textContent='No rivers match'; return; } q.target=g; q.river=g.n;
+    const g=pickRiver(); if(!g){ Q.prompt.textContent='No rivers match'; return; } q.target=g; q.river=g.n; dbg.target=g.n+' (river, rank '+g.r+')';
     rivers.setStyle(riverStyle);
     Q.eye.textContent='Which river is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
     map.flyToBounds(nearBounds(boxBounds(g.b)).pad(.35),{maxZoom:6,duration:.8});
@@ -461,7 +479,7 @@ function nextQuestion(){
     opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
     showInfo(null); return;
   }
-  const t=pick(); if(!t){ Q.prompt.textContent='No countries match'; return; } q.target=t;
+  const t=pick(); if(!t){ Q.prompt.textContent='No countries match'; return; } q.target=t; dbg.target=t.n+(t.mb?' home '+t.mb.join(','):'');
   countries.setStyle(countryStyle); rivers.setStyle(riverStyle);
   if(q.mode==='find'){
     Q.eye.textContent='Click this country on the map'; Q.prompt.textContent=t.n; Q.sub.textContent=t.sub+' \u00b7 pan and zoom freely, then click it';
@@ -469,7 +487,7 @@ function nextQuestion(){
   } else {
     Q.eye.textContent='Which country is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
     const l=byName[t.n]; q.flash[t.n]=css('--hl'); l.setStyle(countryStyle(l.feature));
-    const b=nearBounds(t.mb?boxBounds(t.mb):l.getBounds()); map.flyToBounds(b.pad(t.area<50000?3:1.2),{maxZoom:t.area<5000?7:6,duration:.8});
+    const b=nearBounds(t.mb?boxBounds(t.mb):l.getBounds()); map.flyToBounds(b.pad(t.area<50000?2:t.area<1e6?.8:.35),{maxZoom:t.area<5000?7:6,duration:.8}); paintDbg();
     const same=D.countries.features.map(f=>f.properties).filter(p=>p.sov&&p.n!==t.n&&p.c===t.c&&p.n!=='Antarctica');
     const opts=[t]; while(opts.length<4&&same.length){ const i=Math.floor(Math.random()*same.length); opts.push(same.splice(i,1)[0]); }
     opts.sort(()=>Math.random()-.5);
@@ -494,7 +512,9 @@ function answerName(o,btn){
   btn.classList.add(ok?'right':'wrong');
   if(!ok){ [...Q.choices.children].forEach(b=>{ if(b.textContent===q.target.n) b.classList.add('right'); }); }
   Q.fb.textContent = ok ? 'Right.' : 'It is '+q.target.n+'.'; Q.fb.className='fb '+(ok?'ok':'bad');
-  setTimeout(nextQuestion, ok?800:2200);
+  if(!ok){ const tb=q.mode==='river'?boxBounds(q.target.b):(q.target.mb?boxBounds(q.target.mb):byName[q.target.n].getBounds());
+    const nb=nearBounds(tb); if(!map.getBounds().contains(nb)) map.flyToBounds(nb.pad(.5),{maxZoom:6,duration:.7}); }
+  setTimeout(nextQuestion, ok?800:3000);
 }
 bFind.addEventListener('click',()=> state.quiz&&state.quiz.mode==='find' ? stopQuiz() : startQuiz('find'));
 bName.addEventListener('click',()=> state.quiz&&state.quiz.mode==='name' ? stopQuiz() : startQuiz('name'));
@@ -507,7 +527,7 @@ const help=document.getElementById('help');
 document.getElementById('helpBtn').addEventListener('click',()=>{ help.hidden=false; help.querySelector('.sheet').focus(); });
 document.getElementById('helpClose').addEventListener('click',()=>{ help.hidden=true; });
 help.addEventListener('click',e=>{ if(e.target===help) help.hidden=true; });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!help.hidden){ help.hidden=true; return; } if(e.key==='Escape'&&state.quiz) stopQuiz(); if(state.quiz&&state.quiz.mode!=='find'&&/^[1-4]$/.test(e.key)){ const b=Q.choices.children[+e.key-1]; b&&b.click(); } });
+document.addEventListener('keydown',e=>{ if(e.key==='d'&&!e.ctrlKey&&!e.metaKey&&e.target.tagName!=='INPUT'&&e.target.tagName!=='SELECT'){ dbg.on=!dbg.on; paintDbg(); } if(e.key==='Escape'&&!help.hidden){ help.hidden=true; return; } if(e.key==='Escape'&&state.quiz) stopQuiz(); if(state.quiz&&state.quiz.mode!=='find'&&/^[1-4]$/.test(e.key)){ const b=Q.choices.children[+e.key-1]; b&&b.click(); } });
 
 /* theme changes: restyle vectors from tokens */
 function restyleAll(){ countries.setStyle(countryStyle); shade.setStyle(shadeStyle); lakes.setStyle({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast')}); rivers.setStyle(riverStyle); bounds.setStyle(f=>{const dis=/Disputed|Lease|Indefinite|Overlay|Unrecognized|Line of control|Breakaway/i.test(f.properties.f); return {color:dis?css('--border-dis'):css('--border'),weight:dis?1:(satOn?1.5:1.3)};}); cityLayer.eachLayer(m=>m.setStyle({color:css('--city'),fillColor:m.p.cap===1?css('--city'):css('--panel')})); }
