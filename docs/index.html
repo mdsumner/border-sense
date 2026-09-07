@@ -105,6 +105,7 @@ body.sat .lbl.city{color:#FFF6DC}
   <div class="group"><span class="lab">Show</span>
     <button class="tog" id="tNames" aria-pressed="true">Names</button>
     <select id="cityMin" aria-label="Cities"><option value="cap">Capitals</option><option value="5000000">Cities 5M+</option><option value="1000000" selected>Cities 1M+</option><option value="250000">Cities 250k+</option><option value="0">All cities</option><option value="off">No cities</option></select>
+    <button class="tog" id="tBorders" aria-pressed="true">Borders</button>
     <button class="tog" id="tRivers" aria-pressed="true">Rivers</button>
   </div>
   <div class="group"><span class="lab">Base</span>
@@ -187,14 +188,14 @@ const CONT = {'Africa':'#D9B36A','Asia':'#C98A6B','Europe':'#8FB0A0','North Amer
 const CONT_DARK = {'Africa':'#6A5330','Asia':'#63402F','Europe':'#3B5A4E','North America':'#4E3F5B','South America':'#4B5330','Oceania':'#2E4C5C','Antarctica':'#39424A','Seven seas (open ocean)':'#2E4C5C'};
 const isDark = () => css('--ocean').toUpperCase()==='#131E27';
 
-let satOn=false, landOff=false, namesOn=true, citiesOn=true, riversOn=true, shadeMode='none', shadeOp=.45;
+let satOn=false, landOff=false, bordersOn=true, namesOn=true, citiesOn=true, riversOn=true, shadeMode='none', shadeOp=.45;
 const NATION=['#E4B04A','#7FB3C9','#C97A6B','#8FBF8A','#B99BD1','#D9A377','#6FA9A3','#D48BA6'];
 const NATION_DARK=['#B98A2E','#3F7C97','#9E4F42','#4F8A4C','#7E62A0','#A66A3A','#2F7A73','#A0526E'];
 const state = {hover:null, pinned:null, quiz:null};
 
 function countryStyle(f){
   const p=f.properties;
-  const st={fillColor:css('--land'),fillOpacity:landOff?0:1,color:css('--coast'),weight:satOn?.8:.6,opacity:1};
+  const st={fillColor:css('--land'),fillOpacity:landOff?0:1,color:css('--coast'),weight:satOn?.8:.6,opacity:bordersOn?1:0};
   const ho=satOn?.65:1;
   if(state.quiz && state.quiz.flash && state.quiz.flash[p.n]){ st.fillColor=state.quiz.flash[p.n]; st.fillOpacity=ho; }
   else if(state.pinned===p.n){ st.fillColor=css('--hl'); st.fillOpacity=ho; }
@@ -292,6 +293,12 @@ map.on('click',()=>{ if(!state.quiz&&state.pinned){ state.pinned=null; countries
 function tog(id,fn){ const b=document.getElementById(id); b.addEventListener('click',()=>{ const v=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',v); fn(v); }); return b; }
 tog('tNames',v=>{ namesOn=v; document.body.classList.toggle('hideNames',!v); refreshLabels(); showInfo(state.pinned?byName[state.pinned].feature.properties:null); });
 document.getElementById('cityMin').addEventListener('change',e=>{ cityMin=e.target.value; refreshLabels(); });
+tog('tBorders',v=>{ bordersOn=v; syncBorders(); });
+function syncBorders(){
+  if(bordersOn){ if(satOn) bounds2.addTo(map); bounds.addTo(map); bounds.bringToFront(); }
+  else { if(map.hasLayer(bounds)) map.removeLayer(bounds); if(map.hasLayer(bounds2)) map.removeLayer(bounds2); }
+  countries.setStyle(countryStyle);
+}
 tog('tRivers',v=>{ riversOn=v; if(v){rivers.addTo(map);} else {map.removeLayer(rivers);} });
 const baseSel=document.getElementById('base');
 function setBase(b){
@@ -299,7 +306,8 @@ function setBase(b){
   base=b; satOn=!!IMG_BASES[b]; landOff=b!=='plain';
   document.body.classList.toggle('sat',satOn);
   if(BASES[b]) BASES[b].addTo(map);
-  if(satOn){ bounds2.addTo(map); bounds.bringToFront(); } else if(map.hasLayer(bounds2)) map.removeLayer(bounds2);
+  if(map.hasLayer(bounds2)) map.removeLayer(bounds2);
+  syncBorders();
   restyleAll();
 }
 baseSel.addEventListener('change',()=>setBase(baseSel.value));
