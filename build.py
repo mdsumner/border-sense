@@ -139,6 +139,25 @@ def colour_countries(features):
         f["properties"]["col"] = col[i]
 
 
+def home_bounds(polys, best):
+    """Bounding box of a country's 'home' territory: the largest part plus any part that is either
+    within 25 degrees of it or at least 30 percent of its area. Keeps the Name-it zoom on the
+    Netherlands rather than the Netherlands plus Bonaire, while USA still includes Alaska via size."""
+    if not best[1]:
+        return None
+    bx, by = best[1]
+    xs, ys = [], []
+    for poly in polys:
+        A, c = area_centroid(poly[0])
+        if c is None:
+            continue
+        near = abs(c[0] - bx) < 25 and abs(c[1] - by) < 25
+        if A == best[0] or near or A >= 0.3 * best[0]:
+            for x, y in poly[0]:
+                xs.append(x); ys.append(y)
+    return [round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2)]
+
+
 def build_data():
     C = slim(os.path.join(CACHE, "ne_50m_admin_0_countries.geojson"),
              {"n": "NAME_LONG", "sn": "NAME", "s": "SOVEREIGNT", "t": "TYPE", "c": "CONTINENT", "adm": "ADMIN",
@@ -156,10 +175,15 @@ def build_data():
                 best = (A, c)
         p["area"] = round(total)
         p["lp"] = LABEL_FIX.get(p["n"], list(best[1]) if best[1] else None)
+        p["mb"] = home_bounds(polys, best)
     for f in C["features"]:
         dx = stitch_antimeridian(f)
         if dx:
             print("  stitched", f["properties"]["n"], dx)
+            g = f["geometry"]; p = f["properties"]
+            polys = [g["coordinates"]] if g["type"] == "Polygon" else g["coordinates"]
+            best = max(((area_centroid(q[0])) for q in polys), key=lambda ac: ac[0])
+            p["mb"] = home_bounds(polys, best)
     colour_countries(C["features"])
     B = slim(os.path.join(CACHE, "ne_50m_admin_0_boundary_lines_land.geojson"), {"f": "FEATURECLA"})
     R = slim(os.path.join(CACHE, "ne_50m_rivers_lake_centerlines.geojson"), {"n": "name_en", "r": "scalerank"},

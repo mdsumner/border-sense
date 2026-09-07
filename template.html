@@ -87,6 +87,22 @@ select{font:inherit;font-size:12.5px;background:var(--panel-2);color:var(--ink);
 input[type=range]{width:90px;accent-color:var(--ink);vertical-align:middle}
 body.sat{--label:#FFF6DC;--label-halo:rgba(10,20,30,.95);--city:#FFF6DC;--coast:rgba(255,246,220,.45);--border:#FFF1C9;--border-dis:#F2C77A;--river:#9CD3F0;--lake:transparent}
 body.sat .lbl.city{color:#FFF6DC}
+body.quiz .leaflet-tooltip{display:none}
+/* help */
+#help[hidden]{display:none}
+#help{position:absolute;inset:0;z-index:2000;background:rgba(20,24,28,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+#help .sheet{background:var(--panel);color:var(--ink);border:1px solid var(--line);max-width:720px;width:100%;padding:28px 32px 36px;position:relative}
+#help h2{font-family:"Fraunces",Georgia,serif;font-weight:700;font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+#help h3{font-family:"Fraunces",Georgia,serif;font-weight:500;font-size:19px;margin:28px 0 8px;padding-top:14px;border-top:1px solid var(--line)}
+#help h4{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);margin:18px 0 4px}
+#help p,#help li{font-size:14px;line-height:1.5;max-width:62ch}
+#help ul{padding-left:20px;margin:6px 0}
+#help li{margin:3px 0}
+#help kbd{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel-2);padding:0 5px;border-radius:3px}
+#help .tldr{background:var(--panel-2);padding:14px 18px;margin:14px 0 6px}
+#help .tldr p{margin:4px 0}
+#help .close{position:absolute;top:14px;right:14px}
+#help .lede{color:var(--ink-2);font-size:13.5px;margin:0}
 @media (max-width:720px){
   #quiz{width:auto;left:14px;right:14px;top:auto;bottom:14px}
   #info{display:none}
@@ -119,6 +135,7 @@ body.sat .lbl.city{color:#FFF6DC}
   <div class="group"><span class="lab">Quiz</span>
     <button class="tog" id="qFind" aria-pressed="false">Find it</button>
     <button class="tog" id="qName" aria-pressed="false">Name it</button>
+    <button class="tog" id="qRiver" aria-pressed="false">River</button>
     <select id="qRegion" aria-label="Region">
       <option value="">Whole world</option>
       <option>Africa</option><option>Asia</option><option>Europe</option>
@@ -131,9 +148,68 @@ body.sat .lbl.city{color:#FFF6DC}
     </select>
   </div>
   <span class="spacer"></span>
+  <button class="tog" id="helpBtn" aria-haspopup="dialog">Help</button>
 </div>
 
 <div id="map"></div>
+
+<div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="sheet">
+    <button class="btn quiet close" id="helpClose">Close</button>
+    <h2 id="helpTitle">Border Sense</h2>
+    <p class="lede">A map for learning borders, rivers, cities and land masses by looking at them a lot.</p>
+
+    <div class="tldr">
+      <h4>Quick start</h4>
+      <p><b>Look around.</b> Hover a country for its name, region, capital, area and people; click to pin it. Turn <b>Names</b> off to learn shapes cold.</p>
+      <p><b>Find it</b> names a country: click it on the map. Green means right; red shows what you hit and green the answer.</p>
+      <p><b>Name it</b> highlights a country and offers four names (keys <kbd>1</kbd>-<kbd>4</kbd>). <b>River</b> does the same for a river.</p>
+      <p><b>Filters</b> beside the quiz buttons narrow the pool by continent and size. <kbd>Esc</kbd> stops a quiz.</p>
+      <p><b>Borders</b> and <b>Rivers</b> toggle independently, so you can tell a river from a border that follows it. <b>Shade</b> colours nations or continents, opacity on the slider.</p>
+    </div>
+
+    <h3>Reading the map</h3>
+    <p>Everything is drawn as vectors from Natural Earth at 1:50 million, so country boundaries stay crisp at every zoom; there is no basemap tile behind them on the Plain base. Solid dark lines are land borders; dashed lines are disputed, leased or otherwise indefinite boundaries as Natural Earth records them. Coastlines are the edge of the land fill. Rivers and lake centrelines are the blue lines, with a name on hover for the larger ones; lakes are filled.</p>
+    <p>At 1:50m a line vertex is roughly every 5 to 10 km, which is good to about zoom 8. Past that the imagery keeps getting sharper on the hosted site while the borders stay as they are.</p>
+    <h4>Names and classification</h4>
+    <p>Country names and the sovereign / dependency split follow Natural Earth's de facto conventions. The quizzes draw on the 196 units Natural Earth treats as sovereign states (plus a few it treats as countries in their own right, such as Kosovo); dependencies and territories are drawn and hoverable but never asked. Antarctica is never asked.</p>
+    <h4>Labels</h4>
+    <p>Country labels appear by size as you zoom: the largest at zoom 2, then progressively smaller ones at 3, 4, 5 and 6.5. Turning Names off hides every label and blurs the name on the hover card, but leaves capital, area and population visible.</p>
+    <h4>Cities</h4>
+    <p>The Cities menu filters by population: capitals only, 5M+, 1M+, 250k+, or all 1,251 places in the Natural Earth 1:50m set. Filled dots are capitals; open dots are other cities. Each city's label also has its own minimum zoom scaled by population (megacities near zoom 4, 1M cities at 5.5, 250k towns at 6.5, the rest at 7.5) so dense regions only fill in when you zoom into them. Hover a dot for the name, country and population.</p>
+
+    <h3>Base maps and shading</h3>
+    <p><b>Plain</b> is paper-coloured land on a muted ocean, designed so the lines are the loudest thing on the map. <b>Blue Marble</b> is NASA's Blue Marble Next Generation image (December 2004, with topography and bathymetry), reprojected to Web Mercator and embedded in the page at about 7 km per pixel; it is sharp to roughly zoom 5 to 6 and softens beyond. On any imagery base the borders switch to a light line with a dark halo and the labels get a dark halo so they stay legible.</p>
+    <p>On the hosted site two live bases are also offered: <b>Satellite</b> (Esri World Imagery, sharp to street level) and <b>Terrain</b> (Esri shaded relief, label free), plus a <b>Hillshade</b> overlay that multiplies Esri hillshading over whatever base is showing, so you can read relief under paper-coloured borders. These need a network connection and are not available in the single-file version of the page.</p>
+    <p><b>Shade</b> fills each country with a colour. <i>By nation</i> uses a proper map colouring: the countries' border-adjacency graph is coloured greedily at build time so no two neighbours share a hue (five colours turn out to be enough). <i>By continent</i> uses one hue per continent. The slider sets the fill opacity; moving it with shading off switches to By nation.</p>
+
+    <h3>Longitude range and the dateline</h3>
+    <p>The map can be panned from 270 degrees west to 270 degrees east, one and a half turns of the globe, so the Pacific can sit in the middle of the screen with the Americas on the right and Asia on the left. Every layer is drawn three times, at -360, 0 and +360 degrees, which is what makes the view seamless across the 180th meridian.</p>
+    <p>The reason this needs saying is that Natural Earth, like most world datasets, splits polygons at the antimeridian, so a country that straddles it (Fiji, Russia at Chukotka, the western Aleutians of the USA, New Zealand's outlying islands, Kiribati) arrives as parts on both edges of the world and a bounding box that spans the whole planet. At build time the smaller side of each such country is shifted across the line by 360 degrees so the country is contiguous again: Fiji lives at 174 to 182 degrees east, Russia runs 19 to 190 east, the far Aleutians sit at -188. With the three copies drawn, every part of every country is always visible in the place you would expect. Kiribati is the one country that is spread out for real, with the Gilberts at 173 east and the Line Islands at 157 west, so its quiz zoom is necessarily wide.</p>
+
+    <h3>The quizzes</h3>
+    <h4>Find it</h4>
+    <p>The panel names a country and its region. Pan and zoom as much as you like, then click the country. Clicking the sea does nothing; a click on land is your answer and there is no confirmation step. A correct click flashes green and moves on after a moment; a wrong one shows the country you clicked in red and the one asked for in green for a couple of seconds, flying there if it was off screen.</p>
+    <h4>Name it</h4>
+    <p>A country is highlighted, all labels are hidden, and four names are offered: the answer plus three from the same continent. Answer by clicking or with keys 1 to 4. Hover cards and tooltips are suppressed during the quiz so nothing gives the answer away.</p>
+    <h4>River</h4>
+    <p>A river is highlighted and the map flies to it; four names are offered, the distractors chosen from rivers nearby rather than at random. Rivers are turned on for the duration if you had them off, and river tooltips are suppressed. The size filter applies: Large only asks the great rivers, All sizes adds the next tier, Small ones too asks every named river in the set. Region filtering uses the countries the river runs through.</p>
+    <h4>Auto zoom is a heuristic</h4>
+    <p>When Name it flies to a country it has to decide what to frame, and the honest bounding box of a country is often not what you want to see: the Netherlands includes Bonaire, Sint Eustatius and Saba in the Caribbean, France includes French Guiana, the USA includes Hawaii and the Aleutians. The whole polygon is always highlighted, but the zoom frames the country's home territory: its largest landmass plus any part that is either within 25 degrees of it or at least 30 percent of its size. That keeps the Netherlands on the North Sea and still includes Alaska for the USA. It is a rule of thumb; if a country lands at an odd zoom, pan and zoom freely before answering, nothing about the question changes.</p>
+    <h4>Pools, scoring and filters</h4>
+    <p>Region narrows the pool to a continent. Size uses Natural Earth's area: Large only is countries over 60,000 square km, All sizes is everything over 2,500 square km, Small ones too adds the microstates and small island nations. Questions avoid repeating the last dozen answers. Right, wrong and streak reset when you reload; the best streak is kept in this browser only. Skip counts as a broken streak but not as a wrong answer.</p>
+
+    <h3>Keyboard</h3>
+    <ul>
+      <li><kbd>1</kbd> to <kbd>4</kbd> answer a Name it or River question</li>
+      <li><kbd>Esc</kbd> stops the current quiz, or closes this help</li>
+      <li>Scroll to zoom, drag to pan, as usual; the map holds at 88 degrees north and south</li>
+    </ul>
+
+    <h3>Data and credits</h3>
+    <p>Natural Earth 1:50m (public domain): admin-0 countries and boundary lines, rivers and lake centrelines, lakes, populated places. NASA Blue Marble Next Generation (public domain). Esri World Imagery, World Shaded Relief and World Hillshade on the hosted site, under Esri's terms of use. Leaflet 1.9.4. The page renders in your light or dark theme; the map colours follow.</p>
+  </div>
+</div>
 
 <div id="info">
   <div class="eyebrow" id="iEye">Hover a country</div>
@@ -221,13 +297,20 @@ const IMG_BASES={bm:true,'esri-sat':true};
 let base='plain', reliefOn=false;
 const bounds2 = L.geoJSON(W.bounds,{renderer:R,interactive:false,style:{color:'rgba(5,15,25,.75)',weight:3.4,opacity:1,lineCap:'round'}});
 const lakes = L.geoJSON(W.lakes,{renderer:R,style:()=>({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast'),weight:.5}),interactive:false}).addTo(map);
-const rivers = L.geoJSON(W.rivers,{renderer:R,style:f=>({color:css('--river'),weight:f.properties.r<=3?1.4:.8,opacity:.9}),
+function riverStyle(f){ const p=f.properties, hl=state.quiz&&state.quiz.river===p.n; return {color:hl?css('--hl2'):css('--river'),weight:hl?4:(p.r<=3?1.4:.8),opacity:hl?1:.9}; }
+const rivers = L.geoJSON(W.rivers,{renderer:R,style:riverStyle,
   onEachFeature:(f,l)=>{ if(f.properties.n) l.bindTooltip(f.properties.n,{sticky:true,className:'riv',direction:'top',offset:[0,-6]}); }}).addTo(map);
 const bounds = L.geoJSON(W.bounds,{renderer:R,interactive:false,style:f=>{
   const dis=/Disputed|Lease|Indefinite|Overlay|Unrecognized|Line of control|Breakaway/i.test(f.properties.f);
   return {color:dis?css('--border-dis'):css('--border'),weight:dis?1:1.3,opacity:1,dashArray:dis?'4 3':null,lineCap:'round'};
 }}).addTo(map);
 
+/* river groups: NE rivers come as many segments per name */
+const RIV={};
+D.rivers.features.forEach(f=>{ const p=f.properties; if(!p.n) return; const g=RIV[p.n]||(RIV[p.n]={n:p.n,r:99,b:null}); g.r=Math.min(g.r,p.r);
+  const cs=f.geometry.type==='LineString'?[f.geometry.coordinates]:f.geometry.coordinates;
+  cs.forEach(line=>line.forEach(c=>{ const b=g.b||(g.b=[c[0],c[1],c[0],c[1]]); b[0]=Math.min(b[0],c[0]); b[1]=Math.min(b[1],c[1]); b[2]=Math.max(b[2],c[0]); b[3]=Math.max(b[3],c[1]); })); });
+const RIVERS=Object.values(RIV);
 function reorder(){ [shade,lakes,rivers,bounds2,bounds,cityLayer].forEach(l=>{ if(map.hasLayer(l)) l.bringToFront(); }); }
 /* cities */
 const cityLayer = L.featureGroup().addTo(map);
@@ -268,7 +351,7 @@ function capitalOf(a3){ const c=D.places.features.find(f=>f.properties.cap===1&&
 const info=document.getElementById('info'), iEye=document.getElementById('iEye'), iName=document.getElementById('iName'), iMeta=document.getElementById('iMeta');
 function showInfo(p){
   if(state.quiz && state.quiz.mode==='find'){ info.hidden=false; iEye.textContent='Click this country'; iName.textContent=state.quiz.target.n; iMeta.innerHTML='<span>Region</span><b>'+state.quiz.target.sub+'</b>'; info.classList.remove('hidden-names'); return; }
-  if(state.quiz && state.quiz.mode==='name'){ info.hidden=true; return; }
+  if(state.quiz && state.quiz.mode!=='find'){ info.hidden=true; return; }
   info.hidden=false;
   if(!p){ iEye.textContent='Hover a country'; iName.innerHTML='&nbsp;'; iMeta.innerHTML=''; return; }
   iEye.textContent = p.sov ? p.c : (p.t+' of '+p.s);
@@ -318,22 +401,41 @@ const score={right:0,wrong:0,streak:0,best:0};
 try{ score.best=+localStorage.getItem('bs-best')||0; }catch(e){}
 function paintScore(){ Q.right.textContent=score.right; Q.wrong.textContent=score.wrong; Q.streak.textContent=score.streak; Q.best.textContent=score.best; }
 paintScore();
-const bFind=document.getElementById('qFind'), bName=document.getElementById('qName');
+const bFind=document.getElementById('qFind'), bName=document.getElementById('qName'), bRiver=document.getElementById('qRiver');
 function pool(){
   const reg=document.getElementById('qRegion').value, size=document.getElementById('qSize').value;
   return D.countries.features.map(f=>f.properties).filter(p=>p.sov && p.n!=='Antarctica' && (!reg||p.c===reg) && (size==='all'?p.area>=2500: size==='big'?p.area>=60000: true));
 }
 function startQuiz(mode){
-  state.quiz={mode,target:null,recent:[],flash:{},lock:false};
-  bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name');
-  Q.el.hidden=false; state.pinned=null;
-  if(mode==='name'){ document.body.classList.add('hideNames'); }
+  state.quiz={mode,target:null,recent:[],flash:{},lock:false,river:null,riversWereOff:false};
+  bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name'); bRiver.setAttribute('aria-pressed',mode==='river');
+  Q.el.hidden=false; state.pinned=null; document.body.classList.add('quiz');
+  if(mode!=='find'){ document.body.classList.add('hideNames'); }
+  if(mode==='river'&&!riversOn){ state.quiz.riversWereOff=true; rivers.addTo(map); reorder(); }
   nextQuestion();
 }
 function stopQuiz(){
-  state.quiz=null; bFind.setAttribute('aria-pressed','false'); bName.setAttribute('aria-pressed','false');
-  Q.el.hidden=true; document.body.classList.toggle('hideNames',!namesOn); refreshLabels(); countries.setStyle(countryStyle); showInfo(null);
+  const q=state.quiz; state.quiz=null;
+  [bFind,bName,bRiver].forEach(b=>b.setAttribute('aria-pressed','false'));
+  Q.el.hidden=true; document.body.classList.remove('quiz'); document.body.classList.toggle('hideNames',!namesOn); refreshLabels();
+  countries.setStyle(countryStyle); rivers.setStyle(riverStyle); showInfo(null);
+  if(q&&q.riversWereOff) map.removeLayer(rivers);
 }
+function riverPool(){
+  const size=document.getElementById('qSize').value, reg=document.getElementById('qRegion').value;
+  const maxr=size==='big'?3:size==='all'?5:99;
+  return RIVERS.filter(g=>g.r<=maxr && (!reg||riverInRegion(g,reg)));
+}
+const contBoxes={};
+D.countries.features.forEach(f=>{ const p=f.properties; if(!p.mb||!p.sov) return; (contBoxes[p.c]||(contBoxes[p.c]=[])).push(p.mb); });
+function riverInRegion(g,reg){ const cx=(g.b[0]+g.b[2])/2, cy=(g.b[1]+g.b[3])/2; return (contBoxes[reg]||[]).some(b=>cx>=b[0]&&cx<=b[2]&&cy>=b[1]&&cy<=b[3]); }
+function pickRiver(){
+  const P=riverPool(); if(!P.length) return null;
+  let c; for(let i=0;i<20;i++){ c=P[Math.floor(Math.random()*P.length)]; if(!state.quiz.recent.includes(c.n)) break; }
+  state.quiz.recent.push(c.n); if(state.quiz.recent.length>Math.min(12,P.length-1)) state.quiz.recent.shift();
+  return c;
+}
+function boxBounds(b){ return L.latLngBounds([b[1],b[0]],[b[3],b[2]]); }
 function nearBounds(b){ const c=map.getCenter().lng, bc=b.getCenter().lng; let dx=0; if(bc-c>180) dx=-360; else if(c-bc>180) dx=360; return dx?L.latLngBounds([b.getSouth(),b.getWest()+dx],[b.getNorth(),b.getEast()+dx]):b; }
 function pick(){
   const P=pool(); if(!P.length) return null;
@@ -343,15 +445,28 @@ function pick(){
 }
 function nextQuestion(){
   const q=state.quiz; if(!q) return; q.flash={}; q.lock=false; Q.fb.textContent=''; Q.fb.className='fb'; Q.choices.innerHTML='';
+  q.river=null;
+  if(q.mode==='river'){
+    const g=pickRiver(); if(!g){ Q.prompt.textContent='No rivers match'; return; } q.target=g; q.river=g.n;
+    rivers.setStyle(riverStyle);
+    Q.eye.textContent='Which river is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
+    map.flyToBounds(nearBounds(boxBounds(g.b)).pad(.35),{maxZoom:6,duration:.8});
+    const cx=(g.b[0]+g.b[2])/2, cy=(g.b[1]+g.b[3])/2;
+    const near=RIVERS.filter(o=>o.n!==g.n).map(o=>({o,d:Math.hypot((o.b[0]+o.b[2])/2-cx,(o.b[1]+o.b[3])/2-cy)})).sort((a,b)=>a.d-b.d).slice(0,10).map(x=>x.o);
+    const opts=[g]; while(opts.length<4&&near.length){ const i=Math.floor(Math.random()*near.length); opts.push(near.splice(i,1)[0]); }
+    opts.sort(()=>Math.random()-.5);
+    opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
+    showInfo(null); return;
+  }
   const t=pick(); if(!t){ Q.prompt.textContent='No countries match'; return; } q.target=t;
-  countries.setStyle(countryStyle);
+  countries.setStyle(countryStyle); rivers.setStyle(riverStyle);
   if(q.mode==='find'){
     Q.eye.textContent='Click this country on the map'; Q.prompt.textContent=t.n; Q.sub.textContent=t.sub+' \u00b7 pan and zoom freely, then click it';
     showInfo(null);
   } else {
     Q.eye.textContent='Which country is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
     const l=byName[t.n]; q.flash[t.n]=css('--hl'); l.setStyle(countryStyle(l.feature));
-    const b=nearBounds(l.getBounds()); map.flyToBounds(b.pad(t.area<50000?3:1.2),{maxZoom:t.area<5000?7:6,duration:.8});
+    const b=nearBounds(t.mb?boxBounds(t.mb):l.getBounds()); map.flyToBounds(b.pad(t.area<50000?3:1.2),{maxZoom:t.area<5000?7:6,duration:.8});
     const same=D.countries.features.map(f=>f.properties).filter(p=>p.sov&&p.n!==t.n&&p.c===t.c&&p.n!=='Antarctica');
     const opts=[t]; while(opts.length<4&&same.length){ const i=Math.floor(Math.random()*same.length); opts.push(same.splice(i,1)[0]); }
     opts.sort(()=>Math.random()-.5);
@@ -380,14 +495,19 @@ function answerName(o,btn){
 }
 bFind.addEventListener('click',()=> state.quiz&&state.quiz.mode==='find' ? stopQuiz() : startQuiz('find'));
 bName.addEventListener('click',()=> state.quiz&&state.quiz.mode==='name' ? stopQuiz() : startQuiz('name'));
+bRiver.addEventListener('click',()=> state.quiz&&state.quiz.mode==='river' ? stopQuiz() : startQuiz('river'));
 document.getElementById('qSkip').addEventListener('click',()=>{ if(state.quiz&&!state.quiz.lock){ score.streak=0; paintScore(); nextQuestion(); } });
 document.getElementById('qStop').addEventListener('click',stopQuiz);
 document.getElementById('qRegion').addEventListener('change',()=>{ if(state.quiz){ state.quiz.recent=[]; nextQuestion(); } });
 document.getElementById('qSize').addEventListener('change',()=>{ if(state.quiz){ state.quiz.recent=[]; nextQuestion(); } });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&state.quiz) stopQuiz(); if(state.quiz&&state.quiz.mode==='name'&&/^[1-4]$/.test(e.key)){ const b=Q.choices.children[+e.key-1]; b&&b.click(); } });
+const help=document.getElementById('help');
+document.getElementById('helpBtn').addEventListener('click',()=>{ help.hidden=false; help.querySelector('.sheet').focus(); });
+document.getElementById('helpClose').addEventListener('click',()=>{ help.hidden=true; });
+help.addEventListener('click',e=>{ if(e.target===help) help.hidden=true; });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!help.hidden){ help.hidden=true; return; } if(e.key==='Escape'&&state.quiz) stopQuiz(); if(state.quiz&&state.quiz.mode!=='find'&&/^[1-4]$/.test(e.key)){ const b=Q.choices.children[+e.key-1]; b&&b.click(); } });
 
 /* theme changes: restyle vectors from tokens */
-function restyleAll(){ countries.setStyle(countryStyle); shade.setStyle(shadeStyle); lakes.setStyle({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast')}); rivers.setStyle(f=>({color:css('--river')})); bounds.setStyle(f=>{const dis=/Disputed|Lease|Indefinite|Overlay|Unrecognized|Line of control|Breakaway/i.test(f.properties.f); return {color:dis?css('--border-dis'):css('--border'),weight:dis?1:(satOn?1.5:1.3)};}); cityLayer.eachLayer(m=>m.setStyle({color:css('--city'),fillColor:m.p.cap===1?css('--city'):css('--panel')})); }
+function restyleAll(){ countries.setStyle(countryStyle); shade.setStyle(shadeStyle); lakes.setStyle({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast')}); rivers.setStyle(riverStyle); bounds.setStyle(f=>{const dis=/Disputed|Lease|Indefinite|Overlay|Unrecognized|Line of control|Breakaway/i.test(f.properties.f); return {color:dis?css('--border-dis'):css('--border'),weight:dis?1:(satOn?1.5:1.3)};}); cityLayer.eachLayer(m=>m.setStyle({color:css('--city'),fillColor:m.p.cap===1?css('--city'):css('--panel')})); }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',restyleAll);
 new MutationObserver(restyleAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 }

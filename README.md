@@ -14,8 +14,14 @@ Features
   Terrain (Esri shaded relief) and a Hillshade overlay
 - shading by nation (proper greedy map-colouring over the adjacency graph, no two
   neighbours share a hue) or by continent, with an opacity slider
-- quizzes: Find it (click the named country) and Name it (four choices, keys 1-4),
-  filterable by continent and country size; streak and best score kept locally
+- quizzes: Find it (click the named country), Name it (four choices, keys 1-4) and River
+  (name the highlighted river, distractors drawn from nearby rivers), filterable by continent
+  and size; streak and best score kept locally
+- Name-it auto zoom frames a country's home territory (largest landmass plus parts near it or
+  at least 30 percent of its size) rather than its full extent, so the Netherlands is framed on
+  the North Sea while the whole polygon, Caribbean parts included, stays highlighted
+- in-page Help with a quick start and a full guide (data, labels, bases, dateline handling,
+  quiz mechanics)
 - seamless across the antimeridian: dateline-straddling countries are stitched and
   every layer is drawn at -360/0/+360, pannable to +/-270 degrees
 
