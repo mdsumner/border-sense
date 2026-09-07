@@ -158,6 +158,14 @@ def home_bounds(polys, best):
     return [round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2)]
 
 
+# Natural Earth types things de facto; the quiz pool follows it with two explicit adjustments.
+# Kosovo is typed "Disputed" (excluded by the rule) but is asked; Northern Cyprus and Somaliland are
+# typed "Sovereign country" but have almost no recognition and are not asked. Taiwan stays in,
+# Palestine and Western Sahara stay out (typed "Indeterminate"). Pool is 195.
+QUIZ_INCLUDE = {"Kosovo"}
+QUIZ_EXCLUDE = {"Northern Cyprus", "Somaliland"}
+
+
 def build_data():
     C = slim(os.path.join(CACHE, "ne_50m_admin_0_countries.geojson"),
              {"n": "NAME_LONG", "sn": "NAME", "s": "SOVEREIGNT", "t": "TYPE", "c": "CONTINENT", "adm": "ADMIN",
@@ -165,6 +173,10 @@ def build_data():
     for f in C["features"]:
         p = f["properties"]
         p["sov"] = p["t"] in ("Sovereign country", "Country", "Sovereignty") and p["s"] == p.pop("adm")
+        if p["n"] in QUIZ_INCLUDE:
+            p["sov"] = True
+        if p["n"] in QUIZ_EXCLUDE:
+            p["sov"] = False
         p["pop"] = int(p["pop"] or 0)
         g = f["geometry"]
         polys = [g["coordinates"]] if g["type"] == "Polygon" else g["coordinates"]

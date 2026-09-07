@@ -87,6 +87,10 @@ select{font:inherit;font-size:12.5px;background:var(--panel-2);color:var(--ink);
 .leaflet-tooltip.riv{background:var(--panel);color:var(--ink);border:1px solid var(--line);font-style:italic;box-shadow:none}
 .leaflet-tooltip.riv::before{display:none}
 .hideNames .lbl{display:none}
+.search input{font:inherit;font-size:12.5px;font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:4px 7px;width:190px}
+.search input.bad{border-color:var(--bad)}
+.search input:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+#qCount{min-width:64px}
 input[type=range]{width:90px;accent-color:var(--ink);vertical-align:middle}
 body.sat{--label:#FFF6DC;--label-halo:rgba(10,20,30,.95);--city:#FFF6DC;--coast:rgba(255,246,220,.45);--border:#FFF1C9;--border-dis:#F2C77A;--river:#9CD3F0;--lake:transparent}
 body.sat .lbl.city{color:#FFF6DC}
@@ -156,6 +160,10 @@ body.quiz .leaflet-tooltip{display:none}
     </select>
   </div>
   <span class="spacer"></span>
+  <div class="group search"><span class="lab">Find</span>
+    <input type="text" id="q" placeholder="regex, e.g. congo|guinea" aria-label="Search countries and rivers by regular expression" autocomplete="off" spellcheck="false">
+    <span id="qCount" class="lab"></span>
+  </div>
   <button class="tog" id="helpBtn" aria-haspopup="dialog">Help</button>
 </div>
 
@@ -173,6 +181,7 @@ body.quiz .leaflet-tooltip{display:none}
       <p><b>Find it</b> names a country: click it on the map. Green means right; red shows what you hit and green the answer.</p>
       <p><b>Name it</b> highlights a country and offers four names (keys <kbd>1</kbd>-<kbd>4</kbd>). <b>River</b> does the same for a river.</p>
       <p><b>Filters</b> beside the quiz buttons narrow the pool by continent and size. <kbd>Esc</kbd> stops a quiz.</p>
+      <p><b>Find</b> box: type a regular expression (<code>congo</code>, <code>^s.*land$</code>, <code>guinea|guyana</code>) to highlight every matching country and river; the count appears beside it, <kbd>Enter</kbd> zooms to fit the matches, <kbd>Esc</kbd> clears.</p>
       <p><b>Borders</b> and <b>Rivers</b> toggle independently, so you can tell a river from a border that follows it. <b>Shade</b> colours nations or continents, opacity on the slider.</p>
     </div>
 
@@ -180,7 +189,9 @@ body.quiz .leaflet-tooltip{display:none}
     <p>Everything is drawn as vectors from Natural Earth at 1:50 million, so country boundaries stay crisp at every zoom; there is no basemap tile behind them on the Plain base. Solid dark lines are land borders; dashed lines are disputed, leased or otherwise indefinite boundaries as Natural Earth records them. Coastlines are the edge of the land fill. Rivers and lake centrelines are the blue lines, with a name on hover for the larger ones; lakes are filled.</p>
     <p>At 1:50m a line vertex is roughly every 5 to 10 km, which is good to about zoom 8. Past that the imagery keeps getting sharper on the hosted site while the borders stay as they are.</p>
     <h4>Names and classification</h4>
-    <p>Country names and the sovereign / dependency split follow Natural Earth's de facto conventions. The quizzes draw on the 196 units Natural Earth treats as sovereign states (plus a few it treats as countries in their own right, such as Kosovo); dependencies and territories are drawn and hoverable but never asked. Antarctica is never asked.</p>
+    <p>Country names and the sovereign / dependency split follow Natural Earth's de facto conventions. The quizzes draw on the units Natural Earth types as sovereign states, with two adjustments: Kosovo is added (Natural Earth types it as disputed) and Northern Cyprus and Somaliland are left out (typed sovereign, but with almost no recognition). Taiwan is in; Palestine and Western Sahara are out, typed indeterminate. That gives a pool of 195. Dependencies, Crown dependencies and self-governing constituents such as Greenland, the Faroes, Jersey, Guernsey, the Isle of Man, Hong Kong or Puerto Rico are drawn and hoverable but never asked, nor used as distractors. Antarctica is never asked.</p>
+    <h4>Search</h4>
+    <p>The Find box is a case-insensitive regular expression, unanchored, tested against each country's long name, short name, sovereign name and three-letter code, and against river names. <code>congo</code> lights up both Congos; <code>^.*stan$</code> the -stans; <code>^(fr|gb)</code> works on codes. Matching countries are filled in the orange-red highlight; matching rivers are drawn thick in blue. The count beside the box reads for example "2 countries, 1 river"; an invalid pattern turns the box red. Enter zooms to fit all matches (using the home-territory bounds, so <code>france</code> frames metropolitan France). Starting a quiz clears the search.</p>
     <h4>Hover</h4>
     <p>By default the country under the cursor is highlighted and described in the card at bottom left, and a click pins it. With Hover off nothing reacts to the cursor; a click still pins and describes a country, a second click on it unpins. City and river tooltips are unaffected; use the Cities menu and the Rivers button to remove those.</p>
     <h4>Labels</h4>
@@ -271,7 +282,7 @@ const isDark = () => css('--ocean').toUpperCase()==='#131E27';
 let satOn=false, landOff=false, bordersOn=true, hoverOn=true, namesOn=true, citiesOn=true, riversOn=true, shadeMode='none', shadeOp=.45;
 const NATION=['#E4B04A','#7FB3C9','#C97A6B','#8FBF8A','#B99BD1','#D9A377','#6FA9A3','#D48BA6'];
 const NATION_DARK=['#B98A2E','#3F7C97','#9E4F42','#4F8A4C','#7E62A0','#A66A3A','#2F7A73','#A0526E'];
-const state = {hover:null, pinned:null, quiz:null};
+const state = {hover:null, pinned:null, quiz:null, search:null, searchRivers:null};
 
 function countryStyle(f){
   const p=f.properties;
@@ -279,6 +290,7 @@ function countryStyle(f){
   const ho=satOn?.65:1;
   if(state.quiz && state.quiz.flash && state.quiz.flash[p.n]){ st.fillColor=state.quiz.flash[p.n]; st.fillOpacity=ho; }
   else if(state.pinned===p.n){ st.fillColor=css('--hl'); st.fillOpacity=ho; }
+  else if(state.search&&state.search.has(p.n)){ st.fillColor=css('--hl2'); st.fillOpacity=satOn?.6:.8; }
   else if(state.hover===p.n && !(state.quiz&&state.quiz.mode==='name')){ st.fillColor=css('--hl'); st.fillOpacity=satOn?.55:.75; }
   return st;
 }
@@ -307,7 +319,7 @@ const IMG_BASES={bm:true,'esri-sat':true};
 let base='plain', reliefOn=false;
 const bounds2 = L.geoJSON(W.bounds,{renderer:R,interactive:false,style:{color:'rgba(5,15,25,.75)',weight:3.4,opacity:1,lineCap:'round'}});
 const lakes = L.geoJSON(W.lakes,{renderer:R,style:()=>({fillColor:css('--lake'),fillOpacity:landOff?0:1,color:css('--coast'),weight:.5}),interactive:false}).addTo(map);
-function riverStyle(f){ const p=f.properties, hl=state.quiz&&state.quiz.river===p.n; return {color:hl?css('--hl2'):css('--river'),weight:hl?4:(p.r<=3?1.4:.8),opacity:hl?1:.9}; }
+function riverStyle(f){ const p=f.properties, qz=state.quiz&&state.quiz.river===p.n, sr=!qz&&state.searchRivers&&state.searchRivers.has(p.n); return {color:qz?css('--hl2'):sr?css('--focus'):css('--river'),weight:(qz||sr)?4:(p.r<=3?1.4:.8),opacity:(qz||sr)?1:.9}; }
 const rivers = L.geoJSON(W.rivers,{renderer:R,style:riverStyle,
   onEachFeature:(f,l)=>{ if(f.properties.n) l.bindTooltip(f.properties.n,{sticky:true,className:'riv',direction:'top',offset:[0,-6]}); }}).addTo(map);
 const bounds = L.geoJSON(W.bounds,{renderer:R,interactive:false,style:f=>{
@@ -321,6 +333,28 @@ D.rivers.features.forEach(f=>{ const p=f.properties; if(!p.n) return; const g=RI
   const cs=f.geometry.type==='LineString'?[f.geometry.coordinates]:f.geometry.coordinates;
   cs.forEach(line=>line.forEach(c=>{ const b=g.b||(g.b=[c[0],c[1],c[0],c[1]]); b[0]=Math.min(b[0],c[0]); b[1]=Math.min(b[1],c[1]); b[2]=Math.max(b[2],c[0]); b[3]=Math.max(b[3],c[1]); })); });
 const RIVERS=Object.values(RIV);
+/* regex search over countries (long/short/sovereign name, ISO code) and river names */
+const qEl=document.getElementById('q'), qCount=document.getElementById('qCount');
+function runSearch(){
+  const s=qEl.value.trim(); qEl.classList.remove('bad');
+  if(!s){ state.search=null; state.searchRivers=null; qCount.textContent=''; countries.setStyle(countryStyle); rivers.setStyle(riverStyle); return; }
+  let re; try{ re=new RegExp(s,'i'); }catch(e){ qEl.classList.add('bad'); qCount.textContent='bad regex'; return; }
+  const cs=new Set(), rs=new Set();
+  D.countries.features.forEach(f=>{ const p=f.properties; if(re.test(p.n)||re.test(p.sn)||re.test(p.s)||re.test(p.a3)) cs.add(p.n); });
+  RIVERS.forEach(g=>{ if(re.test(g.n)) rs.add(g.n); });
+  state.search=cs; state.searchRivers=rs;
+  qCount.textContent=(cs.size?cs.size+' countr'+(cs.size===1?'y':'ies'):'')+(cs.size&&rs.size?', ':'')+(rs.size?rs.size+' river'+(rs.size===1?'':'s'):'')||'no match';
+  countries.setStyle(countryStyle); rivers.setStyle(riverStyle);
+}
+function zoomSearch(){
+  if(!state.search&&!state.searchRivers) return; let b=null;
+  const add=x=>{ b=b?b.extend(x):L.latLngBounds(x.getSouthWest(),x.getNorthEast()); };
+  (state.search||[]).forEach(n=>{ const l=byName[n]; const p=l.feature.properties; add(p.mb?boxBounds(p.mb):l.getBounds()); });
+  (state.searchRivers||[]).forEach(n=>add(boxBounds(RIV[n].b)));
+  if(b) map.flyToBounds(nearBounds(b).pad(.2),{maxZoom:7,duration:.8});
+}
+let qTimer; qEl.addEventListener('input',()=>{ clearTimeout(qTimer); qTimer=setTimeout(runSearch,120); });
+qEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){ runSearch(); zoomSearch(); } if(e.key==='Escape'){ qEl.value=''; runSearch(); qEl.blur(); } e.stopPropagation(); });
 function reorder(){ [shade,lakes,rivers,bounds2,bounds,cityLayer].forEach(l=>{ if(map.hasLayer(l)) l.bringToFront(); }); }
 /* cities */
 const cityLayer = L.featureGroup().addTo(map);
@@ -420,7 +454,7 @@ function pool(){
 function startQuiz(mode){
   state.quiz={mode,target:null,recent:[],flash:{},lock:false,river:null,riversWereOff:false};
   bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name'); bRiver.setAttribute('aria-pressed',mode==='river');
-  Q.el.hidden=false; state.pinned=null; document.body.classList.add('quiz');
+  Q.el.hidden=false; state.pinned=null; document.body.classList.add('quiz'); qEl.value=''; runSearch();
   if(mode!=='find'){ document.body.classList.add('hideNames'); }
   if(mode==='river'&&!riversOn){ state.quiz.riversWereOff=true; rivers.addTo(map); reorder(); }
   nextQuestion();
