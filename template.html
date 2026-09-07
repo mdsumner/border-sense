@@ -117,6 +117,7 @@ body.quiz .leaflet-tooltip{display:none}
   <h1>Border Sense<small>Natural Earth 1:50m</small></h1>
   <div class="group"><span class="lab">Show</span>
     <button class="tog" id="tNames" aria-pressed="true">Names</button>
+    <button class="tog" id="tHover" aria-pressed="true">Hover</button>
     <select id="cityMin" aria-label="Cities"><option value="cap">Capitals</option><option value="5000000">Cities 5M+</option><option value="1000000" selected>Cities 1M+</option><option value="250000">Cities 250k+</option><option value="0">All cities</option><option value="off">No cities</option></select>
     <button class="tog" id="tBorders" aria-pressed="true">Borders</button>
     <button class="tog" id="tRivers" aria-pressed="true">Rivers</button>
@@ -163,7 +164,7 @@ body.quiz .leaflet-tooltip{display:none}
 
     <div class="tldr">
       <h4>Quick start</h4>
-      <p><b>Look around.</b> Hover a country for its name, region, capital, area and people; click to pin it. Turn <b>Names</b> off to learn shapes cold.</p>
+      <p><b>Look around.</b> Hover a country for its name, region, capital, area and people; click to pin it. <b>Hover</b> off makes it click-only. Turn <b>Names</b> off to learn shapes cold.</p>
       <p><b>Find it</b> names a country: click it on the map. Green means right; red shows what you hit and green the answer.</p>
       <p><b>Name it</b> highlights a country and offers four names (keys <kbd>1</kbd>-<kbd>4</kbd>). <b>River</b> does the same for a river.</p>
       <p><b>Filters</b> beside the quiz buttons narrow the pool by continent and size. <kbd>Esc</kbd> stops a quiz.</p>
@@ -175,6 +176,8 @@ body.quiz .leaflet-tooltip{display:none}
     <p>At 1:50m a line vertex is roughly every 5 to 10 km, which is good to about zoom 8. Past that the imagery keeps getting sharper on the hosted site while the borders stay as they are.</p>
     <h4>Names and classification</h4>
     <p>Country names and the sovereign / dependency split follow Natural Earth's de facto conventions. The quizzes draw on the 196 units Natural Earth treats as sovereign states (plus a few it treats as countries in their own right, such as Kosovo); dependencies and territories are drawn and hoverable but never asked. Antarctica is never asked.</p>
+    <h4>Hover</h4>
+    <p>By default the country under the cursor is highlighted and described in the card at bottom left, and a click pins it. With Hover off nothing reacts to the cursor; a click still pins and describes a country, a second click on it unpins. City and river tooltips are unaffected; use the Cities menu and the Rivers button to remove those.</p>
     <h4>Labels</h4>
     <p>Country labels appear by size as you zoom: the largest at zoom 2, then progressively smaller ones at 3, 4, 5 and 6.5. Turning Names off hides every label and blurs the name on the hover card, but leaves capital, area and population visible.</p>
     <h4>Cities</h4>
@@ -262,7 +265,7 @@ const CONT = {'Africa':'#D9B36A','Asia':'#C98A6B','Europe':'#8FB0A0','North Amer
 const CONT_DARK = {'Africa':'#6A5330','Asia':'#63402F','Europe':'#3B5A4E','North America':'#4E3F5B','South America':'#4B5330','Oceania':'#2E4C5C','Antarctica':'#39424A','Seven seas (open ocean)':'#2E4C5C'};
 const isDark = () => css('--ocean').toUpperCase()==='#131E27';
 
-let satOn=false, landOff=false, bordersOn=true, namesOn=true, citiesOn=true, riversOn=true, shadeMode='none', shadeOp=.45;
+let satOn=false, landOff=false, bordersOn=true, hoverOn=true, namesOn=true, citiesOn=true, riversOn=true, shadeMode='none', shadeOp=.45;
 const NATION=['#E4B04A','#7FB3C9','#C97A6B','#8FBF8A','#B99BD1','#D9A377','#6FA9A3','#D48BA6'];
 const NATION_DARK=['#B98A2E','#3F7C97','#9E4F42','#4F8A4C','#7E62A0','#A66A3A','#2F7A73','#A0526E'];
 const state = {hover:null, pinned:null, quiz:null};
@@ -278,8 +281,8 @@ function countryStyle(f){
 }
 const countries = L.geoJSON(W.countries,{renderer:R,style:countryStyle,
   onEachFeature:(f,l)=>{
-    l.on('mouseover',()=>{ state.hover=f.properties.n; l.setStyle(countryStyle(f)); showInfo(f.properties); });
-    l.on('mouseout',()=>{ if(state.hover===f.properties.n) state.hover=null; l.setStyle(countryStyle(f)); if(!state.pinned) showInfo(null); });
+    l.on('mouseover',()=>{ if(!hoverOn) return; state.hover=f.properties.n; l.setStyle(countryStyle(f)); showInfo(f.properties); });
+    l.on('mouseout',()=>{ if(!hoverOn) return; if(state.hover===f.properties.n) state.hover=null; l.setStyle(countryStyle(f)); showInfo(state.pinned?byName[state.pinned].feature.properties:null); });
     l.on('click',(e)=>{ L.DomEvent.stop(e); onCountryClick(f,l); });
   }}).addTo(map);
 const byName={}; countries.eachLayer(l=>{ if(!l.feature.properties.dx) byName[l.feature.properties.n]=l; });
@@ -357,7 +360,7 @@ function showInfo(p){
   if(state.quiz && state.quiz.mode==='find'){ info.hidden=false; iEye.textContent='Click this country'; iName.textContent=state.quiz.target.n; iMeta.innerHTML='<span>Region</span><b>'+state.quiz.target.sub+'</b>'; info.classList.remove('hidden-names'); return; }
   if(state.quiz && state.quiz.mode!=='find'){ info.hidden=true; return; }
   info.hidden=false;
-  if(!p){ iEye.textContent='Hover a country'; iName.innerHTML='&nbsp;'; iMeta.innerHTML=''; return; }
+  if(!p){ iEye.textContent=hoverOn?'Hover a country':'Click a country'; iName.innerHTML='&nbsp;'; iMeta.innerHTML=''; return; }
   iEye.textContent = p.sov ? p.c : (p.t+' of '+p.s);
   iName.textContent=p.n;
   const cap=capitalOf(p.a3);
@@ -373,6 +376,7 @@ map.on('click',()=>{ if(!state.quiz&&state.pinned){ state.pinned=null; countries
 
 /* toggles */
 function tog(id,fn){ const b=document.getElementById(id); b.addEventListener('click',()=>{ const v=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',v); fn(v); }); return b; }
+tog('tHover',v=>{ hoverOn=v; state.hover=null; countries.setStyle(countryStyle); if(!state.pinned) showInfo(null); });
 tog('tNames',v=>{ namesOn=v; document.body.classList.toggle('hideNames',!v); refreshLabels(); showInfo(state.pinned?byName[state.pinned].feature.properties:null); });
 document.getElementById('cityMin').addEventListener('change',e=>{ cityMin=e.target.value; refreshLabels(); });
 tog('tBorders',v=>{ bordersOn=v; syncBorders(); });
