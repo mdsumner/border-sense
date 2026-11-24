@@ -92,6 +92,8 @@ input[type=range]{width:90px;accent-color:var(--ink);vertical-align:middle}
 body.sat{--label:#FFF6DC;--label-halo:rgba(10,20,30,.95);--city:#FFF6DC;--coast:rgba(255,246,220,.45);--border:#FFF1C9;--border-dis:#F2C77A;--river:#9CD3F0;--lake:transparent}
 body.sat .lbl.city{color:#FFF6DC}
 body.quiz .leaflet-tooltip{display:none}
+/* city quiz: live imagery only, no vectors and no labels */
+body.cityquiz .leaflet-overlay-pane,body.cityquiz .leaflet-labels-pane{display:none}
 /* help */
 #dbg{position:absolute;left:14px;top:calc(var(--barh) + 14px);z-index:1500;background:var(--panel);border:1px solid var(--hl2);color:var(--ink);font-size:11.5px;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;padding:8px 10px;pointer-events:none}
 #dbg[hidden]{display:none}
@@ -163,6 +165,7 @@ body.quiz .leaflet-tooltip{display:none}
     <button class="tog" id="qFind" aria-pressed="false">Find it</button>
     <button class="tog" id="qName" aria-pressed="false">Name it</button>
     <button class="tog" id="qRiver" aria-pressed="false">River</button>
+    <button class="tog" id="qCity" aria-pressed="false" data-live hidden>City</button>
     <select id="qRegion" aria-label="Region">
       <option value="">Whole world</option>
       <option>Africa</option><option>Asia</option><option>Europe</option>
@@ -195,7 +198,7 @@ body.quiz .leaflet-tooltip{display:none}
       <h4>Quick start</h4>
       <p><b>Look around.</b> Hover a country for its name, region, capital, area and people; click to pin it. <b>Hover</b> off makes it click-only. Turn <b>Names</b> off to learn shapes cold.</p>
       <p><b>Find it</b> names a country: click it on the map. Green means right; red shows what you hit and green the answer.</p>
-      <p><b>Name it</b> highlights a country and offers four names (keys <kbd>1</kbd>-<kbd>4</kbd>). <b>River</b> does the same for a river.</p>
+      <p><b>Name it</b> highlights a country and offers four names (keys <kbd>1</kbd>-<kbd>4</kbd>). <b>River</b> does the same for a river. <b>City</b> (hosted site only) shows a city on satellite imagery with nothing drawn over it and asks which city it is; zoom in as far as you like.</p>
       <p><b>Filters</b> beside the quiz buttons narrow the pool by continent and size. <b>Easy</b> is the gentle level for younger players: big and populous countries, great rivers, three choices. In Find it, <b>Hint</b> flies the map towards the answer. <kbd>Esc</kbd> stops a quiz.</p>
       <p><b>Find</b> box: type a regular expression (<code>congo</code>, <code>^s.*land$</code>, <code>guinea|guyana</code>) to highlight every matching country and river; the count appears beside it, <kbd>Enter</kbd> zooms to fit the matches, <kbd>Esc</kbd> clears.</p>
       <p><b>Borders</b> and <b>Rivers</b> toggle independently, so you can tell a river from a border that follows it. <b>Shade</b> colours nations or continents, opacity on the slider.</p>
@@ -232,6 +235,8 @@ body.quiz .leaflet-tooltip{display:none}
     <p>A country is highlighted, all labels are hidden, and four names are offered: the answer plus three from the same continent. Answer by clicking or with keys 1 to 4. Hover cards and tooltips are suppressed during the quiz so nothing gives the answer away.</p>
     <h4>River</h4>
     <p>A river is highlighted and the map flies to it; four names are offered, the distractors chosen from rivers nearby rather than at random. Rivers are turned on for the duration if you had them off, and river tooltips are suppressed. The size filter applies: Large only asks the great rivers, All sizes adds the next tier, Small ones too asks every named river in the set. Region filtering uses the countries the river runs through.</p>
+    <h4>City</h4>
+    <p>On the hosted site only, since it needs the live Esri imagery. The map jumps to a city and switches to the Satellite base with every border, river, dot and label removed, and offers names from the same continent. You can zoom in to street level and pan around the city, but not zoom out past roughly a whole-city view (zoom 11) or wander far from it, so the answer has to come from the look of the place: coast, river, street pattern, colour of the land. The region menu applies; the size menu sets how big a city has to be: Easy asks cities of 5 million and up, Large only 2 million, All sizes 1 million plus capitals over half a million, Small ones too 250,000 plus every capital. Populations are Natural Earth's metropolitan figures. Stopping the quiz, or switching to another one, puts the base map and view back as they were.</p>
     <h4>Easy level and hints</h4>
     <p>Easy in the size menu keeps to countries of at least 250,000 km&sup2; or 25 million people (83 of them) and to the top two ranks of rivers, and Name it and River offer three names instead of four, the other two drawn from the same easy set where the continent has enough. In Find it the Hint button flies the map to the wider neighbourhood of the answer, and a second press closer in; hints cost nothing. After each country answer the feedback line also gives the capital. The region and size menus are remembered on the device between visits.</p>
     <h4>Auto zoom is a heuristic</h4>
@@ -467,7 +472,40 @@ const score={right:0,wrong:0,streak:0,best:0};
 try{ score.best=+localStorage.getItem('bs-best')||0; }catch(e){}
 function paintScore(){ Q.right.textContent=score.right; Q.wrong.textContent=score.wrong; Q.streak.textContent=score.streak; Q.best.textContent=score.best; }
 paintScore();
-const bFind=document.getElementById('qFind'), bName=document.getElementById('qName'), bRiver=document.getElementById('qRiver');
+const bFind=document.getElementById('qFind'), bName=document.getElementById('qName'), bRiver=document.getElementById('qRiver'), bCity=document.getElementById('qCity');
+/* ---------- city quiz: one city on live imagery, nothing drawn over it ---------- */
+const WORLD_BOUNDS=[[-88,-270],[88,270]], WORLD_MAXZOOM=LIVE?11:9;
+const CITY={minZoom:11,maxZoom:16,saved:null};
+const contOf={}; D.countries.features.forEach(f=>{ const p=f.properties; if(p.sov||!contOf[p.a3]) contOf[p.a3]=p.c; });
+const CITIES=D.places.features.map(f=>{ const p=f.properties; return {n:p.n,co:p.co,pop:+p.pop||0,cap:p.cap===1,c:contOf[p.a3]||'',ll:[f.geometry.coordinates[1],f.geometry.coordinates[0]]}; });
+function cityPool(){
+  const reg=document.getElementById('qRegion').value, order=['easy','big','all','small'];
+  /* a size with no cities in the region (Easy in Oceania) falls through to the next size down */
+  for(let i=Math.max(0,order.indexOf(document.getElementById('qSize').value));i<order.length;i++){ const P=citiesOf(reg,order[i]); if(P.length>=2||i===order.length-1) return P; }
+}
+function citiesOf(reg,size){
+  return CITIES.filter(c=>(!reg||c.c===reg) && (size==='easy'?c.pop>=5e6: size==='big'?c.pop>=2e6: size==='all'?(c.pop>=1e6||(c.cap&&c.pop>=5e5)): (c.pop>=2.5e5||c.cap)));
+}
+function cityEnter(){
+  CITY.saved={base,c:map.getCenter(),z:map.getZoom()};
+  if(base!=='esri-sat'){ baseSel.value='esri-sat'; setBase('esri-sat'); }
+  document.body.classList.add('cityquiz'); map.setMaxBounds(null); map.setMaxZoom(CITY.maxZoom);
+}
+function cityExit(){
+  const s=CITY.saved; CITY.saved=null; document.body.classList.remove('cityquiz');
+  map.setMinZoom(2); map.setMaxBounds(null);
+  if(s){ map.setView(s.c,s.z,{animate:false}); }
+  map.setMaxZoom(WORLD_MAXZOOM); map.setMaxBounds(WORLD_BOUNDS);
+  if(s&&s.base!==base){ baseSel.value=s.base; setBase(s.base); }
+}
+/* jump to the city at the widest view allowed, centred in the part of the map the quiz sheet leaves clear,
+   then lock zoom-out there and keep panning to the neighbourhood of the city */
+function cityGo(c){
+  const ll=L.latLng(c.ll), z=CITY.minZoom, h=sheetH();
+  map.setMinZoom(2); map.setMaxBounds(null);
+  map.setView(map.unproject(map.project(ll,z).add([0,h/2]),z),z,{animate:false});
+  map.setMinZoom(z); map.setMaxBounds(map.getBounds().pad(.6));
+}
 function pool(){
   const reg=document.getElementById('qRegion').value, size=document.getElementById('qSize').value;
   return D.countries.features.map(f=>f.properties).filter(p=>p.sov && p.n!=='Antarctica' && (!reg||p.c===reg) && (size==='easy'?isEasy(p): size==='all'?p.area>=2500: size==='big'?p.area>=60000: true));
@@ -484,16 +522,19 @@ bHint.addEventListener('click',()=>{ const q=state.quiz; if(!q||q.mode!=='find'|
   const l=byName[q.target.n], b=nearBounds(q.target.mb?boxBounds(q.target.mb):l.getBounds()), far=!q.hints; q.hints=(q.hints||0)+1;
   map.flyToBounds(b.pad(far?6:1.5),flyOpts({maxZoom:far?3:5,duration:.8})); });
 function startQuiz(mode){
+  if(state.quiz&&state.quiz.mode==='city') cityExit();
   state.quiz={mode,target:null,recent:[],flash:{},lock:false,river:null,riversWereOff:false};
-  bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name'); bRiver.setAttribute('aria-pressed',mode==='river');
+  bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name'); bRiver.setAttribute('aria-pressed',mode==='river'); if(bCity) bCity.setAttribute('aria-pressed',mode==='city');
   Q.el.hidden=false; state.pinned=null; document.body.classList.add('quiz'); relayout(); qEl.value=''; runSearch();
   if(mode!=='find'){ document.body.classList.add('hideNames'); }
   if(mode==='river'&&!riversOn){ state.quiz.riversWereOff=true; rivers.addTo(map); reorder(); }
+  if(mode==='city') cityEnter();
   nextQuestion();
 }
 function stopQuiz(){
   const q=state.quiz; state.quiz=null;
-  [bFind,bName,bRiver].forEach(b=>b.setAttribute('aria-pressed','false'));
+  [bFind,bName,bRiver,bCity].forEach(b=>b&&b.setAttribute('aria-pressed','false'));
+  if(q&&q.mode==='city') cityExit();
   Q.el.hidden=true; document.body.classList.remove('quiz'); relayout(); document.body.classList.toggle('hideNames',!namesOn); refreshLabels();
   countries.setStyle(countryStyle); rivers.setStyle(riverStyle); showInfo(null);
   if(q&&q.riversWereOff) map.removeLayer(rivers);
@@ -543,6 +584,20 @@ function pick(){
 function nextQuestion(){
   const q=state.quiz; if(!q) return; q.flash={}; q.lock=false; Q.fb.textContent=''; Q.fb.className='fb'; Q.choices.innerHTML='';
   q.river=null; q.hints=0; bHint.hidden=q.mode!=='find';
+  if(q.mode==='city'){
+    Q.eye.textContent='Which city is this?'; Q.prompt.textContent=''; Q.sub.textContent='';
+    const P=cityPool(); if(!P.length){ Q.prompt.textContent='No cities match'; return; }
+    let c; for(let i=0;i<20;i++){ c=P[Math.floor(Math.random()*P.length)]; if(!q.recent.includes(c)) break; }
+    q.recent.push(c); if(q.recent.length>Math.min(12,P.length-1)) q.recent.shift();
+    q.target=c; dbg.target=c.n+', '+c.co+' (city, '+fmtPop(c.pop)+')';
+    let others=P.filter(o=>o.n!==c.n&&o.c===c.c); if(others.length<nChoices()-1) others=P.filter(o=>o.n!==c.n);
+    if(others.length<nChoices()-1) others=CITIES.filter(o=>o.n!==c.n&&o.c===c.c&&o.pop>=2.5e5);
+    if(others.length<nChoices()-1) others=CITIES.filter(o=>o.n!==c.n&&o.pop>=1e6);
+    const opts=[c]; while(opts.length<nChoices()&&others.length){ const o=others.splice(Math.floor(Math.random()*others.length),1)[0]; if(!opts.some(x=>x.n===o.n)) opts.push(o); }
+    opts.sort(()=>Math.random()-.5);
+    opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
+    cityGo(c); paintDbg(); showInfo(null); return;
+  }
   if(q.mode==='river'){
     const g=pickRiver(); if(!g){ Q.prompt.textContent='No rivers match'; return; } q.target=g; q.river=g.n; dbg.target=g.n+' (river, rank '+g.r+')';
     rivers.setStyle(riverStyle);
@@ -588,14 +643,15 @@ function answerName(o,btn){
   const ok=o.n===q.target.n; mark(ok);
   btn.classList.add(ok?'right':'wrong');
   if(!ok){ [...Q.choices.children].forEach(b=>{ if(b.textContent===q.target.n) b.classList.add('right'); }); }
-  Q.fb.textContent = (ok ? 'Right.' : 'It is '+q.target.n+'.')+(q.mode==='name'?capNote(q.target):''); Q.fb.className='fb '+(ok?'ok':'bad');
-  if(!ok){ const tb=q.mode==='river'?boxBounds(q.target.b):(q.target.mb?boxBounds(q.target.mb):byName[q.target.n].getBounds());
+  Q.fb.textContent = q.mode==='city' ? (ok?'Right: ':'It is ')+q.target.n+', '+q.target.co+'.' : (ok ? 'Right.' : 'It is '+q.target.n+'.')+(q.mode==='name'?capNote(q.target):''); Q.fb.className='fb '+(ok?'ok':'bad');
+  if(!ok&&q.mode!=='city'){ const tb=q.mode==='river'?boxBounds(q.target.b):(q.target.mb?boxBounds(q.target.mb):byName[q.target.n].getBounds());
     const nb=nearBounds(tb); if(!clearView().contains(nb)) map.flyToBounds(nb.pad(.5),flyOpts({maxZoom:6,duration:.7})); }
   setTimeout(nextQuestion, ok?800:3000);
 }
 bFind.addEventListener('click',()=> state.quiz&&state.quiz.mode==='find' ? stopQuiz() : startQuiz('find'));
 bName.addEventListener('click',()=> state.quiz&&state.quiz.mode==='name' ? stopQuiz() : startQuiz('name'));
 bRiver.addEventListener('click',()=> state.quiz&&state.quiz.mode==='river' ? stopQuiz() : startQuiz('river'));
+if(bCity) bCity.addEventListener('click',()=> state.quiz&&state.quiz.mode==='city' ? stopQuiz() : startQuiz('city'));
 document.getElementById('qSkip').addEventListener('click',()=>{ if(state.quiz&&!state.quiz.lock){ score.streak=0; paintScore(); nextQuestion(); } });
 document.getElementById('qStop').addEventListener('click',stopQuiz);
 document.getElementById('qRegion').addEventListener('change',()=>{ if(state.quiz){ state.quiz.recent=[]; nextQuestion(); } });

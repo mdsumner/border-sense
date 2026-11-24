@@ -16,6 +16,8 @@ Features
   neighbours share a hue) or by continent, with an opacity slider
 - quizzes: Find it (click the named country), Name it (four choices, keys 1-4) and River
   (name the highlighted river, distractors drawn from nearby rivers), filterable by continent
+- City quiz on the hosted site: a city on live Esri imagery with no vectors or labels, zoom in
+  freely but not out past a whole-city view; name it from the choices
   and size; streak and best score kept locally
 - Name-it auto zoom frames a country's home territory (largest landmass plus parts near it or
   at least 30 percent of its size) rather than its full extent, so the Netherlands is framed on
