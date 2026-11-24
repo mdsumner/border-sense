@@ -174,7 +174,8 @@ body.quiz .leaflet-tooltip{display:none}
       <option>North America</option><option>South America</option><option>Oceania</option>
     </select>
     <select id="qSize" aria-label="Country size">
-      <option value="all">All sizes</option>
+      <option value="easy">Easy</option>
+      <option value="all" selected>All sizes</option>
       <option value="big">Large only</option>
       <option value="small">Small ones too</option>
     </select>
@@ -200,7 +201,7 @@ body.quiz .leaflet-tooltip{display:none}
       <p><b>Look around.</b> Hover a country for its name, region, capital, area and people; click to pin it. <b>Hover</b> off makes it click-only. Turn <b>Names</b> off to learn shapes cold.</p>
       <p><b>Find it</b> names a country: click it on the map. Green means right; red shows what you hit and green the answer.</p>
       <p><b>Name it</b> highlights a country and offers four names (keys <kbd>1</kbd>-<kbd>4</kbd>). <b>River</b> does the same for a river.</p>
-      <p><b>Filters</b> beside the quiz buttons narrow the pool by continent and size. <kbd>Esc</kbd> stops a quiz.</p>
+      <p><b>Filters</b> beside the quiz buttons narrow the pool by continent and size. <b>Easy</b> is the gentle level for younger players: big and populous countries, great rivers, three choices. In Find it, <b>Hint</b> flies the map towards the answer. <kbd>Esc</kbd> stops a quiz.</p>
       <p><b>Find</b> box: type a regular expression (<code>congo</code>, <code>^s.*land$</code>, <code>guinea|guyana</code>) to highlight every matching country and river; the count appears beside it, <kbd>Enter</kbd> zooms to fit the matches, <kbd>Esc</kbd> clears.</p>
       <p><b>Borders</b> and <b>Rivers</b> toggle independently, so you can tell a river from a border that follows it. <b>Shade</b> colours nations or continents, opacity on the slider.</p>
     </div>
@@ -236,6 +237,8 @@ body.quiz .leaflet-tooltip{display:none}
     <p>A country is highlighted, all labels are hidden, and four names are offered: the answer plus three from the same continent. Answer by clicking or with keys 1 to 4. Hover cards and tooltips are suppressed during the quiz so nothing gives the answer away.</p>
     <h4>River</h4>
     <p>A river is highlighted and the map flies to it; four names are offered, the distractors chosen from rivers nearby rather than at random. Rivers are turned on for the duration if you had them off, and river tooltips are suppressed. The size filter applies: Large only asks the great rivers, All sizes adds the next tier, Small ones too asks every named river in the set. Region filtering uses the countries the river runs through.</p>
+    <h4>Easy level and hints</h4>
+    <p>Easy in the size menu keeps to countries of at least 250,000 km&sup2; or 25 million people (83 of them) and to the top two ranks of rivers, and Name it and River offer three names instead of four, the other two drawn from the same easy set where the continent has enough. In Find it the Hint button flies the map to the wider neighbourhood of the answer, and a second press closer in; hints cost nothing. After each country answer the feedback line also gives the capital. The region and size menus are remembered on the device between visits.</p>
     <h4>Auto zoom is a heuristic</h4>
     <p>When Name it flies to a country it has to decide what to frame, and the honest bounding box of a country is often not what you want to see: the Netherlands includes Bonaire, Sint Eustatius and Saba in the Caribbean, France includes French Guiana, the USA includes Hawaii and the Aleutians. The whole polygon is always highlighted, but the zoom frames the country's home territory: its largest landmass plus any part that is either within 25 degrees of it or at least 30 percent of its size. That keeps the Netherlands on the North Sea and still includes Alaska for the USA. It is a rule of thumb; if a country lands at an odd zoom, pan and zoom freely before answering, nothing about the question changes.</p>
     <h4>Pools, scoring and filters</h4>
@@ -267,7 +270,7 @@ body.quiz .leaflet-tooltip{display:none}
   <div class="choices" id="qChoices"></div>
   <div class="fb" id="qFb"></div>
   <div class="score"><span><b id="sRight">0</b>right</span><span><b id="sWrong">0</b>wrong</span><span><b id="sStreak">0</b>streak</span><span><b id="sBest">0</b>best</span></div>
-  <div class="row"><button class="btn quiet" id="qSkip">Skip</button><button class="btn quiet" id="qStop">Stop</button></div>
+  <div class="row"><button class="btn quiet" id="qHint" hidden>Hint</button><button class="btn quiet" id="qSkip">Skip</button><button class="btn quiet" id="qStop">Stop</button></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -470,8 +473,19 @@ paintScore();
 const bFind=document.getElementById('qFind'), bName=document.getElementById('qName'), bRiver=document.getElementById('qRiver');
 function pool(){
   const reg=document.getElementById('qRegion').value, size=document.getElementById('qSize').value;
-  return D.countries.features.map(f=>f.properties).filter(p=>p.sov && p.n!=='Antarctica' && (!reg||p.c===reg) && (size==='all'?p.area>=2500: size==='big'?p.area>=60000: true));
+  return D.countries.features.map(f=>f.properties).filter(p=>p.sov && p.n!=='Antarctica' && (!reg||p.c===reg) && (size==='easy'?isEasy(p): size==='all'?p.area>=2500: size==='big'?p.area>=60000: true));
 }
+/* Easy: countries a younger player has a fair chance of knowing, and three choices instead of four */
+function isEasy(p){ return p.area>=250000||p.pop>=25e6; }
+function easyOn(){ return document.getElementById('qSize').value==='easy'; }
+function nChoices(){ return easyOn()?3:4; }
+function capNote(p){ const c=capitalOf(p.a3); return c?' Capital: '+c+'.':''; }
+['qRegion','qSize'].forEach(id=>{ const el=document.getElementById(id); try{ const v=localStorage.getItem('bs-'+id); if(v!==null&&[...el.options].some(o=>o.value===v)) el.value=v; }catch(e){}
+  el.addEventListener('change',()=>{ try{ localStorage.setItem('bs-'+id,el.value); }catch(e){} }); });
+const bHint=document.getElementById('qHint');
+bHint.addEventListener('click',()=>{ const q=state.quiz; if(!q||q.mode!=='find'||q.lock||!q.target) return;
+  const l=byName[q.target.n], b=nearBounds(q.target.mb?boxBounds(q.target.mb):l.getBounds()), far=!q.hints; q.hints=(q.hints||0)+1;
+  map.flyToBounds(b.pad(far?6:1.5),flyOpts({maxZoom:far?3:5,duration:.8})); });
 function startQuiz(mode){
   state.quiz={mode,target:null,recent:[],flash:{},lock:false,river:null,riversWereOff:false};
   bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name'); bRiver.setAttribute('aria-pressed',mode==='river');
@@ -489,7 +503,7 @@ function stopQuiz(){
 }
 function riverPool(){
   const size=document.getElementById('qSize').value, reg=document.getElementById('qRegion').value;
-  const maxr=size==='big'?3:size==='all'?5:99;
+  const maxr=size==='easy'?2:size==='big'?3:size==='all'?5:99;
   return RIVERS.filter(g=>g.r<=maxr && (!reg||riverInRegion(g,reg)));
 }
 const contBoxes={};
@@ -531,14 +545,14 @@ function pick(){
 }
 function nextQuestion(){
   const q=state.quiz; if(!q) return; q.flash={}; q.lock=false; Q.fb.textContent=''; Q.fb.className='fb'; Q.choices.innerHTML='';
-  q.river=null;
+  q.river=null; q.hints=0; bHint.hidden=q.mode!=='find';
   if(q.mode==='river'){
     const g=pickRiver(); if(!g){ Q.prompt.textContent='No rivers match'; return; } q.target=g; q.river=g.n; dbg.target=g.n+' (river, rank '+g.r+')';
     rivers.setStyle(riverStyle);
     Q.eye.textContent='Which river is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
     const cx=(g.b[0]+g.b[2])/2, cy=(g.b[1]+g.b[3])/2;
-    const near=RIVERS.filter(o=>o.n!==g.n).map(o=>({o,d:Math.hypot((o.b[0]+o.b[2])/2-cx,(o.b[1]+o.b[3])/2-cy)})).sort((a,b)=>a.d-b.d).slice(0,10).map(x=>x.o);
-    const opts=[g]; while(opts.length<4&&near.length){ const i=Math.floor(Math.random()*near.length); opts.push(near.splice(i,1)[0]); }
+    const near=RIVERS.filter(o=>o.n!==g.n&&(!easyOn()||o.r<=2)).map(o=>({o,d:Math.hypot((o.b[0]+o.b[2])/2-cx,(o.b[1]+o.b[3])/2-cy)})).sort((a,b)=>a.d-b.d).slice(0,10).map(x=>x.o);
+    const opts=[g]; while(opts.length<nChoices()&&near.length){ const i=Math.floor(Math.random()*near.length); opts.push(near.splice(i,1)[0]); }
     opts.sort(()=>Math.random()-.5);
     opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
     map.flyToBounds(nearBounds(boxBounds(g.b)).pad(.35),flyOpts({maxZoom:6,duration:.8}));
@@ -552,8 +566,9 @@ function nextQuestion(){
   } else {
     Q.eye.textContent='Which country is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
     const l=byName[t.n]; q.flash[t.n]=css('--hl'); l.setStyle(countryStyle(l.feature));
-    const same=D.countries.features.map(f=>f.properties).filter(p=>p.sov&&p.n!==t.n&&p.c===t.c&&p.n!=='Antarctica');
-    const opts=[t]; while(opts.length<4&&same.length){ const i=Math.floor(Math.random()*same.length); opts.push(same.splice(i,1)[0]); }
+    let same=D.countries.features.map(f=>f.properties).filter(p=>p.sov&&p.n!==t.n&&p.c===t.c&&p.n!=='Antarctica');
+    if(easyOn()){ const es=same.filter(isEasy); if(es.length>=nChoices()-1) same=es; }
+    const opts=[t]; while(opts.length<nChoices()&&same.length){ const i=Math.floor(Math.random()*same.length); opts.push(same.splice(i,1)[0]); }
     opts.sort(()=>Math.random()-.5);
     opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
     const fb=nearBounds(t.mb?boxBounds(t.mb):l.getBounds()); map.flyToBounds(fb.pad(t.area<50000?2:t.area<1e6?.8:.35),flyOpts({maxZoom:t.area<5000?7:6,duration:.8})); paintDbg();
@@ -565,7 +580,7 @@ function quizClick(f){
   const q=state.quiz; if(q.mode!=='find'||q.lock) return; q.lock=true;
   const p=f.properties, ok=p.n===q.target.n;
   mark(ok);
-  if(ok){ q.flash[p.n]=css('--ok'); Q.fb.textContent='Yes, '+p.n+'.'; Q.fb.className='fb ok'; }
+  if(ok){ q.flash[p.n]=css('--ok'); Q.fb.textContent='Yes, '+p.n+'.'+capNote(p); Q.fb.className='fb ok'; }
   else { q.flash[p.n]=css('--bad'); q.flash[q.target.n]=css('--ok'); Q.fb.textContent='That was '+p.n+'. '+q.target.n+' is shown in green.'; Q.fb.className='fb bad';
     const l=byName[q.target.n], nb=nearBounds(l.getBounds()); if(!clearView().contains(nb.getCenter())) map.flyToBounds(nb.pad(2),flyOpts({maxZoom:5,duration:.8})); }
   countries.setStyle(countryStyle);
@@ -576,7 +591,7 @@ function answerName(o,btn){
   const ok=o.n===q.target.n; mark(ok);
   btn.classList.add(ok?'right':'wrong');
   if(!ok){ [...Q.choices.children].forEach(b=>{ if(b.textContent===q.target.n) b.classList.add('right'); }); }
-  Q.fb.textContent = ok ? 'Right.' : 'It is '+q.target.n+'.'; Q.fb.className='fb '+(ok?'ok':'bad');
+  Q.fb.textContent = (ok ? 'Right.' : 'It is '+q.target.n+'.')+(q.mode==='name'?capNote(q.target):''); Q.fb.className='fb '+(ok?'ok':'bad');
   if(!ok){ const tb=q.mode==='river'?boxBounds(q.target.b):(q.target.mb?boxBounds(q.target.mb):byName[q.target.n].getBounds());
     const nb=nearBounds(tb); if(!clearView().contains(nb)) map.flyToBounds(nb.pad(.5),flyOpts({maxZoom:6,duration:.7})); }
   setTimeout(nextQuestion, ok?800:3000);
