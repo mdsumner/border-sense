@@ -113,9 +113,29 @@ body.quiz .leaflet-tooltip{display:none}
 #help .close{position:absolute;top:14px;right:14px}
 #help .lede{color:var(--ink-2);font-size:13.5px;margin:0}
 @media (max-width:720px){
-  #quiz{width:auto;left:14px;right:14px;top:auto;bottom:14px}
+  #bar{gap:6px 8px;padding:6px 8px}
+  .group{flex-wrap:wrap}
   #info{display:none}
-  #bar{gap:8px}
+  /* quiz on a phone: the bar shrinks to the quiz controls, the card becomes a compact bottom sheet */
+  body.quiz #bar > :not(.quizgroup){display:none}
+  body.quiz .quizgroup{flex:1;min-width:0;border-left:0;padding-left:0}
+  body.quiz .quizgroup .lab{display:none}
+  body.quiz .quizgroup .tog{white-space:nowrap;padding:7px 8px}
+  body.quiz .quizgroup select{flex:1 1 78px;min-width:0;padding:7px 2px}
+  #quiz{width:auto;left:8px;right:8px;top:auto;bottom:calc(8px + env(safe-area-inset-bottom,0px));padding:8px 10px;display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center}
+  #quiz > *{grid-column:1/-1}
+  #quiz .eyebrow{line-height:18px}
+  #quiz .prompt{font-size:22px;min-height:0}
+  #quiz .prompt:empty,#quiz .sub:empty,#quiz .choices:empty,#quiz .fb:empty{display:none}
+  #quiz .sub .wide{display:none}
+  /* feedback takes the place of the eyebrow line, so the sheet does not change height */
+  #quiz .fb{order:-1;min-height:18px;line-height:18px}
+  #quiz:has(.fb:not(:empty)) .eyebrow{display:none}
+  #quiz .choices{grid-template-columns:1fr 1fr}
+  #quiz .choice{min-height:44px;padding:6px 10px;line-height:1.15}
+  #quiz .score{grid-column:1;gap:10px;flex-wrap:wrap}
+  #quiz .row{grid-column:2;flex-wrap:nowrap}
+  #quiz .btn{padding:8px 12px}
 }
 @media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
 </style>
@@ -144,7 +164,7 @@ body.quiz .leaflet-tooltip{display:none}
     <select id="shade" aria-label="Shading"><option value="none">None</option><option value="nation">By nation</option><option value="continent">By continent</option></select>
     <input type="range" id="shadeOp" min="0" max="100" value="45" aria-label="Shade opacity" title="Shade opacity">
   </div>
-  <div class="group"><span class="lab">Quiz</span>
+  <div class="group quizgroup"><span class="lab">Quiz</span>
     <button class="tog" id="qFind" aria-pressed="false">Find it</button>
     <button class="tog" id="qName" aria-pressed="false">Name it</button>
     <button class="tog" id="qRiver" aria-pressed="false">River</button>
@@ -262,7 +282,8 @@ const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 
 const barEl=document.getElementById('bar');
 function fitBar(){ document.documentElement.style.setProperty('--barh',barEl.offsetHeight+'px'); }
-fitBar(); addEventListener('resize',()=>{fitBar(); map.invalidateSize();});
+function relayout(){ fitBar(); map.invalidateSize({animate:false}); }
+fitBar(); addEventListener('resize',relayout);
 const map = L.map('map',{preferCanvas:true,zoomControl:false,minZoom:2,maxZoom:LIVE?11:9,worldCopyJump:false,
   maxBounds:[[-88,-270],[88,270]],maxBoundsViscosity:.8,attributionControl:true, zoomSnap:.5});
 L.control.zoom({position:'bottomright'}).addTo(map);
@@ -454,7 +475,7 @@ function pool(){
 function startQuiz(mode){
   state.quiz={mode,target:null,recent:[],flash:{},lock:false,river:null,riversWereOff:false};
   bFind.setAttribute('aria-pressed',mode==='find'); bName.setAttribute('aria-pressed',mode==='name'); bRiver.setAttribute('aria-pressed',mode==='river');
-  Q.el.hidden=false; state.pinned=null; document.body.classList.add('quiz'); qEl.value=''; runSearch();
+  Q.el.hidden=false; state.pinned=null; document.body.classList.add('quiz'); relayout(); qEl.value=''; runSearch();
   if(mode!=='find'){ document.body.classList.add('hideNames'); }
   if(mode==='river'&&!riversOn){ state.quiz.riversWereOff=true; rivers.addTo(map); reorder(); }
   nextQuestion();
@@ -462,7 +483,7 @@ function startQuiz(mode){
 function stopQuiz(){
   const q=state.quiz; state.quiz=null;
   [bFind,bName,bRiver].forEach(b=>b.setAttribute('aria-pressed','false'));
-  Q.el.hidden=true; document.body.classList.remove('quiz'); document.body.classList.toggle('hideNames',!namesOn); refreshLabels();
+  Q.el.hidden=true; document.body.classList.remove('quiz'); relayout(); document.body.classList.toggle('hideNames',!namesOn); refreshLabels();
   countries.setStyle(countryStyle); rivers.setStyle(riverStyle); showInfo(null);
   if(q&&q.riversWereOff) map.removeLayer(rivers);
 }
@@ -491,6 +512,12 @@ function nearBounds(b){
   dbg.copy=best.getWest().toFixed(1)+'..'+best.getEast().toFixed(1)+' (view centre '+c.toFixed(1)+')';
   return best;
 }
+/* on a phone the quiz card is a sheet over the bottom of the map: frame targets in the part of the map above it */
+const narrow=matchMedia('(max-width:720px)');
+function sheetH(){ return narrow.matches&&!Q.el.hidden ? Q.el.offsetHeight+16 : 0; }
+function flyOpts(o){ const h=sheetH(); if(h) o.paddingBottomRight=[0,h]; return o; }
+function clearView(){ const b=map.getBounds(), h=sheetH(); if(!h) return b;
+  return L.latLngBounds([map.containerPointToLatLng([0,Math.max(0,map.getSize().y-h)]).lat,b.getWest()],[b.getNorth(),b.getEast()]); }
 const dbg={on:/[?&]debug/.test(location.search),copy:'',target:''};
 const dbgEl=document.createElement('div'); dbgEl.id='dbg'; dbgEl.hidden=true; document.body.appendChild(dbgEl);
 function paintDbg(){ if(!dbg.on){ dbgEl.hidden=true; return; } dbgEl.hidden=false; const c=map.getCenter();
@@ -509,27 +536,27 @@ function nextQuestion(){
     const g=pickRiver(); if(!g){ Q.prompt.textContent='No rivers match'; return; } q.target=g; q.river=g.n; dbg.target=g.n+' (river, rank '+g.r+')';
     rivers.setStyle(riverStyle);
     Q.eye.textContent='Which river is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
-    map.flyToBounds(nearBounds(boxBounds(g.b)).pad(.35),{maxZoom:6,duration:.8});
     const cx=(g.b[0]+g.b[2])/2, cy=(g.b[1]+g.b[3])/2;
     const near=RIVERS.filter(o=>o.n!==g.n).map(o=>({o,d:Math.hypot((o.b[0]+o.b[2])/2-cx,(o.b[1]+o.b[3])/2-cy)})).sort((a,b)=>a.d-b.d).slice(0,10).map(x=>x.o);
     const opts=[g]; while(opts.length<4&&near.length){ const i=Math.floor(Math.random()*near.length); opts.push(near.splice(i,1)[0]); }
     opts.sort(()=>Math.random()-.5);
     opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
+    map.flyToBounds(nearBounds(boxBounds(g.b)).pad(.35),flyOpts({maxZoom:6,duration:.8}));
     showInfo(null); return;
   }
   const t=pick(); if(!t){ Q.prompt.textContent='No countries match'; return; } q.target=t; dbg.target=t.n+(t.mb?' home '+t.mb.join(','):'');
   countries.setStyle(countryStyle); rivers.setStyle(riverStyle);
   if(q.mode==='find'){
-    Q.eye.textContent='Click this country on the map'; Q.prompt.textContent=t.n; Q.sub.textContent=t.sub+' \u00b7 pan and zoom freely, then click it';
+    Q.eye.textContent='Click this country on the map'; Q.prompt.textContent=t.n; Q.sub.textContent=t.sub; const w=document.createElement('span'); w.className='wide'; w.textContent=' \u00b7 pan and zoom freely, then click it'; Q.sub.appendChild(w);
     showInfo(null);
   } else {
     Q.eye.textContent='Which country is highlighted?'; Q.prompt.textContent=''; Q.sub.textContent='';
     const l=byName[t.n]; q.flash[t.n]=css('--hl'); l.setStyle(countryStyle(l.feature));
-    const b=nearBounds(t.mb?boxBounds(t.mb):l.getBounds()); map.flyToBounds(b.pad(t.area<50000?2:t.area<1e6?.8:.35),{maxZoom:t.area<5000?7:6,duration:.8}); paintDbg();
     const same=D.countries.features.map(f=>f.properties).filter(p=>p.sov&&p.n!==t.n&&p.c===t.c&&p.n!=='Antarctica');
     const opts=[t]; while(opts.length<4&&same.length){ const i=Math.floor(Math.random()*same.length); opts.push(same.splice(i,1)[0]); }
     opts.sort(()=>Math.random()-.5);
     opts.forEach(o=>{ const b=document.createElement('button'); b.className='choice'; b.textContent=o.n; b.onclick=()=>answerName(o,b); Q.choices.appendChild(b); });
+    const fb=nearBounds(t.mb?boxBounds(t.mb):l.getBounds()); map.flyToBounds(fb.pad(t.area<50000?2:t.area<1e6?.8:.35),flyOpts({maxZoom:t.area<5000?7:6,duration:.8})); paintDbg();
     showInfo(null);
   }
 }
@@ -540,7 +567,7 @@ function quizClick(f){
   mark(ok);
   if(ok){ q.flash[p.n]=css('--ok'); Q.fb.textContent='Yes, '+p.n+'.'; Q.fb.className='fb ok'; }
   else { q.flash[p.n]=css('--bad'); q.flash[q.target.n]=css('--ok'); Q.fb.textContent='That was '+p.n+'. '+q.target.n+' is shown in green.'; Q.fb.className='fb bad';
-    const l=byName[q.target.n], nb=nearBounds(l.getBounds()); if(!map.getBounds().contains(nb.getCenter())) map.flyToBounds(nb.pad(2),{maxZoom:5,duration:.8}); }
+    const l=byName[q.target.n], nb=nearBounds(l.getBounds()); if(!clearView().contains(nb.getCenter())) map.flyToBounds(nb.pad(2),flyOpts({maxZoom:5,duration:.8})); }
   countries.setStyle(countryStyle);
   setTimeout(nextQuestion, ok?900:2600);
 }
@@ -551,7 +578,7 @@ function answerName(o,btn){
   if(!ok){ [...Q.choices.children].forEach(b=>{ if(b.textContent===q.target.n) b.classList.add('right'); }); }
   Q.fb.textContent = ok ? 'Right.' : 'It is '+q.target.n+'.'; Q.fb.className='fb '+(ok?'ok':'bad');
   if(!ok){ const tb=q.mode==='river'?boxBounds(q.target.b):(q.target.mb?boxBounds(q.target.mb):byName[q.target.n].getBounds());
-    const nb=nearBounds(tb); if(!map.getBounds().contains(nb)) map.flyToBounds(nb.pad(.5),{maxZoom:6,duration:.7}); }
+    const nb=nearBounds(tb); if(!clearView().contains(nb)) map.flyToBounds(nb.pad(.5),flyOpts({maxZoom:6,duration:.7})); }
   setTimeout(nextQuestion, ok?800:3000);
 }
 bFind.addEventListener('click',()=> state.quiz&&state.quiz.mode==='find' ? stopQuiz() : startQuiz('find'));
